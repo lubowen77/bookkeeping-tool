@@ -145,11 +145,13 @@ class _CustomerDetailPageState extends State<CustomerDetailPage> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await context.read<AppController>().repository.softDeleteCustomer(
-      customer.id,
-    );
+    final controller = context.read<AppController>();
+    await controller.repository.softDeleteCustomer(customer.id);
     if (!mounted) return;
-    context.read<AppController>().dataChanged();
+    if (controller.recordCustomer?.id == customer.id) {
+      controller.setRecordCustomer(null);
+    }
+    controller.dataChanged();
     showLedgerSnack(context, '已删除「${customer.name}」（回收站可找回）');
     Navigator.pop(context);
   }

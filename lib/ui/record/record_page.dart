@@ -121,11 +121,19 @@ class _RecordPageState extends State<RecordPage> {
     }
     setState(() => _saving = true);
     try {
-      final draftCustomer = customer;
+      final activeCustomer = await controller.repository.getCustomerOrNull(
+        customer.id,
+      );
+      if (activeCustomer == null || activeCustomer != customer) {
+        controller.setRecordCustomer(null);
+        if (mounted) showLedgerSnack(context, '客户已变动，请重新选一次');
+        return;
+      }
+      final draftCustomer = activeCustomer;
       final draftBusiness = _business!;
       final draftAmount = _amount.text;
       final entry = await controller.repository.addEntry(
-        customerId: customer.id,
+        customerId: activeCustomer.id,
         kind: EntryKind.debt,
         amountCents: cents,
         bizDate: businessDateOf(_date),
@@ -137,7 +145,7 @@ class _RecordPageState extends State<RecordPage> {
           : '（${_dateText(_date)}）';
       showLedgerSnack(
         context,
-        '已记上：${customer.name} $_business ¥${Money.formatCents(cents)}$dateSuffix',
+        '已记上：${activeCustomer.name} $_business ¥${Money.formatCents(cents)}$dateSuffix',
         duration: const Duration(seconds: 5),
         actionLabel: '撤销',
         onAction: () => unawaited(
@@ -152,6 +160,9 @@ class _RecordPageState extends State<RecordPage> {
       controller.setRecordCustomer(null);
       controller.dataChanged();
       setState(_amount.clear);
+    } on StateError {
+      controller.setRecordCustomer(null);
+      if (mounted) showLedgerSnack(context, '客户已变动，请重新选一次');
     } catch (error) {
       if (mounted) showLedgerSnack(context, '没记上：$error');
     } finally {
@@ -289,7 +300,9 @@ class _RecordPageState extends State<RecordPage> {
                       FutureBuilder<
                         ({List<BusinessRow> top, bool selectedAlive})
                       >(
-                        key: ValueKey('quick-businesses-${controller.revision}'),
+                        key: ValueKey(
+                          'quick-businesses-${controller.revision}',
+                        ),
                         future: _loadQuickBusinesses(controller),
                         builder: (context, snapshot) {
                           final businesses =
@@ -327,9 +340,8 @@ class _RecordPageState extends State<RecordPage> {
                                   ),
                                   text: business.name,
                                   selected: selected == business.name,
-                                  onTap: () => setState(
-                                    () => _business = business.name,
-                                  ),
+                                  onTap: () =>
+                                      setState(() => _business = business.name),
                                 ),
                               _BusinessButton(
                                 key: const Key('business-button-more'),

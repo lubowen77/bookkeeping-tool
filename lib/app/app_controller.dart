@@ -49,6 +49,7 @@ final class AppController extends ChangeNotifier {
   }
 
   Future<void> reloadAfterImport() async {
+    recordCustomer = null;
     await initialize();
     dataChanged();
   }
