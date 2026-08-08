@@ -1,0 +1,1095 @@
+<title>记账本 · 交互原型</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root{
+    --paper:#F7F6F1; --card:#FFFFFF; --ink:#2B2922; --muted:#6E6A5B;
+    --line:#E7E4DA; --line-soft:#EFEDE5;
+    --green:#1D5C49; --green-ink:#14493A; --green-bg:#E9F1ED;
+    --red:#B5382A; --red-bg:#F8ECE9;
+    --amber-bg:#FBF3DF; --amber-ink:#8A6A1F;
+    --shell:#ECEAE3; --shell-ink:#3A3830; --shell-muted:#7C786A;
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --shell:#22211D; --shell-ink:#E8E6DE; --shell-muted:#98948A; }
+  }
+  :root[data-theme="dark"]{ --shell:#22211D; --shell-ink:#E8E6DE; --shell-muted:#98948A; }
+  :root[data-theme="light"]{ --shell:#ECEAE3; --shell-ink:#3A3830; --shell-muted:#7C786A; }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html{ font-size:17px; }
+  html[data-scale="big"]{ font-size:19.5px; }
+  html[data-scale="huge"]{ font-size:22px; }
+  body{
+    margin:0; background:var(--shell); color:var(--ink);
+    font-family:system-ui,-apple-system,"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei",sans-serif;
+    min-height:100dvh;
+  }
+  button{ font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; }
+  button:focus-visible, input:focus-visible, [tabindex]:focus-visible{ outline:3px solid var(--green); outline-offset:2px; border-radius:6px; }
+  input{ font:inherit; }
+
+  /* ── 桌面外壳 ─────────────────────────── */
+  .stage{ min-height:100dvh; display:flex; align-items:center; justify-content:center; gap:2.2rem; padding:0; }
+  .stage-note{ display:none; max-width:15rem; color:var(--shell-ink); }
+  .stage-note h1{ font-size:1.25rem; margin:0 0 .6rem; line-height:1.3; }
+  .stage-note p{ font-size:.82rem; line-height:1.65; color:var(--shell-muted); margin:.4rem 0; }
+  .stage-note .tag{ display:inline-block; font-size:.7rem; letter-spacing:.12em; color:var(--shell-muted); border:1px solid currentColor; border-radius:99px; padding:.15rem .6rem; margin-bottom:.8rem; }
+  .phone{
+    width:100%; height:100dvh; background:var(--paper); position:relative;
+    display:flex; flex-direction:column; overflow:hidden; overflow:clip;
+  }
+  @media (min-width:560px){
+    .stage{ padding:2.5rem 1.5rem; }
+    .stage-note{ display:block; }
+    .phone{ width:402px; height:min(820px, calc(100dvh - 4rem)); border-radius:34px; border:1px solid rgba(0,0,0,.18); box-shadow:0 24px 60px rgba(20,25,20,.25); }
+  }
+
+  /* ── 页面骨架 ─────────────────────────── */
+  .page{ display:none; flex:1; overflow-y:auto; overscroll-behavior:contain; padding-bottom:1rem; }
+  .page.active{ display:block; }
+  .pagehead{ padding:1.05rem 1.1rem .55rem; display:flex; align-items:baseline; justify-content:space-between; gap:.6rem; }
+  .pagehead h2{ font-size:1.35rem; margin:0; letter-spacing:.02em; }
+  .pagehead .sub{ font-size:.82rem; color:var(--muted); }
+
+  .tabbar{
+    display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid var(--line);
+    background:var(--card); padding:.3rem .4rem calc(.45rem + env(safe-area-inset-bottom));
+  }
+  .tab{ display:flex; flex-direction:column; align-items:center; gap:.14rem; padding:.4rem 0 .25rem; color:var(--muted); border-radius:12px; }
+  .tab svg{ width:1.5rem; height:1.5rem; }
+  .tab span{ font-size:.78rem; }
+  .tab.active{ color:var(--green-ink); font-weight:600; }
+
+  /* ── 通用组件 ─────────────────────────── */
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); margin:0 .8rem .7rem; overflow:hidden; }
+  .btn{
+    display:flex; align-items:center; justify-content:center; gap:.4rem;
+    min-height:3.1rem; border-radius:var(--radius); font-size:1.12rem; font-weight:650; letter-spacing:.04em;
+  }
+  .btn-primary{ background:var(--green); color:#fff; }
+  .btn-primary:active{ background:var(--green-ink); }
+  .btn-ghost{ border:1.5px solid var(--green); color:var(--green-ink); background:var(--card); }
+  .btn-danger-ghost{ border:1.5px solid var(--red); color:var(--red); background:var(--card); }
+  .btn[disabled]{ opacity:.4; }
+  .num{ font-variant-numeric:tabular-nums; }
+
+  .row{ display:flex; align-items:center; gap:.7rem; padding:.85rem 1rem; border-bottom:1px solid var(--line-soft); min-height:3rem; }
+  .row:last-child{ border-bottom:0; }
+  .row .grow{ flex:1; min-width:0; }
+
+  .stamp{
+    flex:none; width:1.9rem; height:1.9rem; border-radius:7px; display:flex; align-items:center; justify-content:center;
+    font-size:.92rem; font-weight:700;
+  }
+  .stamp.debt{ background:var(--red-bg); color:var(--red); }
+  .stamp.payment{ background:var(--green-bg); color:var(--green-ink); }
+  .stamp.discount{ background:var(--amber-bg); color:var(--amber-ink); }
+  .stamp.initial{ background:#EDEBE4; color:var(--muted); }
+
+  .toast{
+    position:absolute; left:50%; bottom:6.2rem; transform:translateX(-50%) translateY(1rem);
+    background:var(--ink); color:#fff; font-size:1.02rem; line-height:1.5; padding:.8rem 1.2rem; border-radius:12px;
+    max-width:88%; text-align:center; opacity:0; pointer-events:none; transition:opacity .18s, transform .18s; z-index:60;
+    display:flex; align-items:center; gap:.8rem;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast.has-undo{ pointer-events:auto; }
+  .toast .undo{
+    flex:none; color:#9FD9BE; font-weight:750; font-size:1.05rem; padding:.35rem .7rem;
+    border:1.5px solid rgba(159,217,190,.55); border-radius:9px;
+  }
+
+  /* 底部弹层 & 全屏面板 */
+  .scrim{ position:absolute; inset:0; background:rgba(30,28,22,.45); opacity:0; pointer-events:none; transition:opacity .18s; z-index:30; }
+  .scrim.show{ opacity:1; pointer-events:auto; }
+  .sheet{
+    position:absolute; left:0; right:0; bottom:0; background:var(--card); border-radius:20px 20px 0 0;
+    transform:translateY(105%); visibility:hidden; z-index:50; max-height:88%; display:flex; flex-direction:column;
+    padding-bottom:env(safe-area-inset-bottom);
+    transition:transform .22s ease, visibility 0s linear .22s;
+  }
+  .sheet.show{ transform:translateY(0); visibility:visible; transition:transform .22s ease; }
+  .sheet-head{ display:flex; align-items:center; justify-content:space-between; padding:1rem 1.1rem .6rem; }
+  .sheet-head h3{ margin:0; font-size:1.18rem; }
+  .sheet-close{ font-size:.95rem; color:var(--muted); padding:.3rem .5rem; }
+  .panel{
+    position:absolute; inset:0; background:var(--paper); z-index:45; transform:translateX(102%); visibility:hidden;
+    transition:transform .22s ease, visibility 0s linear .22s; display:flex; flex-direction:column;
+  }
+  .panel.show{ transform:translateX(0); visibility:visible; transition:transform .22s ease; }
+  .panel-head{ display:flex; align-items:center; gap:.6rem; padding:.9rem .9rem .6rem; }
+  .panel-head h3{ margin:0; font-size:1.2rem; flex:1; }
+  .backbtn{ display:flex; align-items:center; gap:.15rem; color:var(--green-ink); font-size:1.02rem; padding:.3rem .4rem .3rem 0; }
+  .backbtn svg{ width:1.35rem; height:1.35rem; }
+  @media (prefers-reduced-motion: reduce){ .sheet,.panel,.scrim,.toast{ transition:none; } }
+
+  /* ── 记一笔 ─────────────────────────── */
+  .field-label{ font-size:.85rem; color:var(--muted); padding:.7rem 1rem .15rem; letter-spacing:.06em; }
+  .picker-row{ display:flex; align-items:center; gap:.6rem; width:100%; padding:.85rem 1rem; text-align:left; min-height:3.2rem; }
+  .picker-row .val{ flex:1; font-size:1.18rem; font-weight:600; }
+  .picker-row .val.empty{ color:#A7A392; font-weight:500; }
+  .picker-row .chev{ color:#B9B5A6; }
+  .datebar{ display:flex; gap:.5rem; padding:.75rem 1rem; align-items:center; }
+  .datechip{ border:1.5px solid var(--line); border-radius:99px; padding:.42rem .95rem; font-size:.95rem; color:var(--muted); background:var(--card); }
+  .datechip.active{ border-color:var(--green); color:var(--green-ink); font-weight:650; background:var(--green-bg); }
+  .bizgrid{ display:grid; grid-template-columns:repeat(3,1fr); gap:.55rem; padding:.55rem 1rem .95rem; }
+  .bizbtn{ border:1.5px solid var(--line); background:var(--card); border-radius:12px; min-height:2.9rem; font-size:1.05rem; }
+  .bizbtn.active{ border-color:var(--green); background:var(--green-bg); color:var(--green-ink); font-weight:700; }
+  .amount-display{ display:flex; align-items:baseline; gap:.3rem; padding:.55rem 1.1rem .75rem; }
+  .amount-display .cny{ font-size:1.3rem; color:var(--muted); flex:none; }
+  .amt-input{
+    border:0; outline:0; background:transparent; flex:1; min-width:0; width:100%;
+    font-size:2.35rem; font-weight:750; text-align:right; color:var(--ink); padding:0;
+    font-variant-numeric:tabular-nums; caret-color:var(--green);
+  }
+  .amt-input::placeholder{ color:#C9C5B6; }
+  .amt-hint{ font-size:.78rem; color:#A7A392; text-align:right; padding:0 1.1rem .6rem; }
+  .savebar{ padding:.8rem .9rem .5rem; }
+
+  /* 账单版式 */
+  .bill-card{ background:#fff; margin:.6rem .9rem 1rem; border:1px solid var(--line); border-radius:8px; padding:1.25rem 1.1rem 1rem; }
+  .bill-head{ text-align:center; font-size:1.15rem; font-weight:800; letter-spacing:.35em; text-indent:.35em; }
+  .bill-who{ text-align:center; font-size:1.06rem; font-weight:650; margin-top:.55rem; }
+  .bill-upto{ text-align:center; font-size:.85rem; color:var(--muted); margin-top:.2rem; }
+  .bill-sep{ border-top:1.5px dashed var(--line); margin:.85rem 0; }
+  .bill-total-label{ text-align:center; font-size:.9rem; color:var(--muted); }
+  .bill-total{ text-align:center; font-size:2rem; font-weight:800; margin-top:.1rem; }
+  .bill-total.owe{ color:var(--red); }
+  .bill-total.over{ color:var(--green-ink); }
+  .bill-total.zero{ color:var(--muted); font-size:1.4rem; }
+  .bill-table{ width:100%; border-collapse:collapse; font-size:.95rem; }
+  .bill-table td{ padding:.42rem .15rem; border-bottom:1px solid var(--line-soft); }
+  .bill-table tr:last-child td{ border-bottom:0; }
+  .bill-table td:first-child{ color:var(--muted); white-space:nowrap; width:3.6rem; }
+  .bill-table td:last-child{ text-align:right; font-weight:650; white-space:nowrap; }
+  .bill-table .r-owe{ color:var(--red); }
+  .bill-table .r-pay{ color:var(--green-ink); }
+  .bill-foot{ text-align:center; font-size:.78rem; color:#A7A392; line-height:1.7; }
+
+  /* ── 今天 ─────────────────────────── */
+  .daynav{ display:flex; align-items:center; justify-content:center; gap:.4rem; padding:.2rem 1rem .6rem; }
+  .daynav .d{ font-size:1.1rem; font-weight:700; padding:.3rem .7rem; border-radius:10px; background:var(--card); border:1px solid var(--line); }
+  .daynav .arrow{ padding:.45rem .8rem; color:var(--green-ink); font-size:1.25rem; border-radius:10px; }
+  .entry-main{ font-size:1.1rem; font-weight:650; display:flex; gap:.5rem; align-items:baseline; }
+  .entry-sub{ font-size:.85rem; color:var(--muted); margin-top:.1rem; }
+  .entry-amt{ font-size:1.18rem; font-weight:750; }
+  .entry-amt.pos{ color:var(--red); }
+  .entry-amt.neg{ color:var(--green-ink); }
+  .sumline{ display:flex; justify-content:space-between; padding:.8rem 1rem; font-size:.98rem; color:var(--muted); background:var(--paper); border-top:1px dashed var(--line); }
+  .empty-hint{ text-align:center; color:#A7A392; padding:2.4rem 1rem; font-size:1rem; }
+
+  /* 当天纸本照片 */
+  .photo-strip{ display:flex; gap:.6rem; padding:.15rem 1rem .9rem; overflow-x:auto; }
+  .photo-thumb{
+    flex:none; width:4.6rem; height:6rem; background:#fff; border:1px solid var(--line);
+    border-radius:6px; position:relative; box-shadow:0 1px 4px rgba(20,20,10,.1);
+    display:flex; flex-direction:column; gap:.42rem; padding:1.05rem .55rem .55rem; overflow:hidden;
+  }
+  .photo-thumb i{ display:block; height:2px; background:#D8D5C9; border-radius:2px; }
+  .photo-thumb i:nth-child(2n){ width:78%; }
+  .photo-thumb i:nth-child(3n){ width:88%; }
+  .photo-thumb::before{
+    content:attr(data-d); position:absolute; top:.28rem; left:.5rem;
+    font-size:.6rem; color:#B5B1A2; letter-spacing:.05em;
+  }
+  .photo-add{
+    flex:none; width:4.6rem; height:6rem; border:1.5px dashed #C9C5B6; border-radius:6px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.3rem;
+    color:var(--green-ink); font-size:.8rem; font-weight:650; background:var(--card);
+  }
+  .photo-add svg{ width:1.5rem; height:1.5rem; }
+
+  /* ── 客户 ─────────────────────────── */
+  .searchbox{ display:flex; align-items:center; gap:.5rem; background:var(--card); border:1.5px solid var(--line); border-radius:12px; margin:0 .9rem .6rem; padding:.55rem .8rem; }
+  .searchbox svg{ width:1.2rem; height:1.2rem; color:#A7A392; flex:none; }
+  .searchbox input{ border:0; outline:none; flex:1; font-size:1.05rem; background:transparent; min-width:0; }
+  .chips{ display:flex; gap:.5rem; padding:0 .9rem .6rem; flex-wrap:wrap; }
+  .chip{ border:1.5px solid var(--line); background:var(--card); border-radius:99px; padding:.4rem .9rem; font-size:.92rem; color:var(--muted); }
+  .chip.active{ border-color:var(--green); background:var(--green-bg); color:var(--green-ink); font-weight:650; }
+  .cust-name{ font-size:1.12rem; font-weight:650; }
+  .cust-note{ font-size:.83rem; color:var(--muted); margin-top:.08rem; }
+  .cust-bal{ text-align:right; }
+  .cust-bal .n{ font-size:1.15rem; font-weight:750; }
+  .cust-bal .n.owe{ color:var(--red); }
+  .cust-bal .n.zero{ color:#A7A392; font-size:.9rem; font-weight:500; }
+  .cust-bal .n.over{ color:var(--green-ink); }
+  .fab{
+    position:absolute; right:1rem; bottom:5.6rem; z-index:20; background:var(--green); color:#fff;
+    border-radius:99px; padding:.85rem 1.3rem; font-size:1.08rem; font-weight:700; box-shadow:0 6px 18px rgba(20,60,45,.35);
+    display:flex; align-items:center; gap:.3rem;
+  }
+  [hidden]{ display:none !important; }
+  .group-label{ padding:.55rem 1rem .25rem; font-size:.8rem; color:#A7A392; letter-spacing:.15em; }
+
+  /* ── 客户详情 ─────────────────────────── */
+  .balance-hero{ text-align:center; padding:1.6rem 1rem 1.1rem; }
+  .balance-hero .who{ font-size:1.15rem; font-weight:650; }
+  .balance-hero .who small{ color:var(--muted); font-weight:400; font-size:.85rem; margin-left:.35rem; }
+  .balance-hero .label{ font-size:.9rem; color:var(--muted); margin-top:.7rem; letter-spacing:.1em; }
+  .balance-hero .big{ font-size:2.7rem; font-weight:800; letter-spacing:.01em; margin-top:.15rem; }
+  .balance-hero .big.owe{ color:var(--red); }
+  .balance-hero .big.zero{ color:var(--muted); font-size:1.6rem; padding:.5rem 0; }
+  .balance-hero .big.over{ color:var(--green-ink); }
+  .actions2{ display:grid; grid-template-columns:1.4fr 1fr; gap:.6rem; padding:0 .9rem .9rem; }
+
+  /* ── 我的 ─────────────────────────── */
+  .mine-item .t{ font-size:1.08rem; font-weight:600; }
+  .mine-item .s{ font-size:.84rem; color:var(--muted); margin-top:.12rem; }
+  .badge-ok{ font-size:.8rem; color:var(--green-ink); background:var(--green-bg); border-radius:99px; padding:.2rem .6rem; font-weight:650; }
+  .seg{ display:flex; border:1.5px solid var(--line); border-radius:10px; overflow:hidden; }
+  .seg button{ padding:.45rem .8rem; font-size:.9rem; color:var(--muted); border-right:1px solid var(--line); }
+  .seg button:last-child{ border-right:0; }
+  .seg button.active{ background:var(--green); color:#fff; font-weight:650; }
+  .warnbar{ margin:0 .9rem .7rem; background:var(--amber-bg); color:var(--amber-ink); border-radius:12px; padding:.7rem .9rem; font-size:.9rem; line-height:1.5; }
+
+  /* 收款弹层 */
+  .settle-owe{ text-align:center; font-size:.95rem; color:var(--muted); padding:.2rem 1rem 0; }
+  .settle-owe b{ color:var(--red); font-size:1.15rem; }
+  .settle-remain{ text-align:center; font-size:1rem; padding:.45rem 1rem .2rem; color:var(--muted); min-height:1.9rem; }
+  .settle-remain b.owe{ color:var(--red); }
+  .settle-remain b.over{ color:var(--green-ink); }
+  .wipecheck{ display:flex; align-items:center; gap:.6rem; margin:.4rem 1rem .2rem; padding:.7rem .9rem; border:1.5px solid var(--line); border-radius:12px; font-size:1rem; }
+  .wipecheck input{ width:1.35rem; height:1.35rem; accent-color:var(--green); flex:none; }
+  .wipecheck.on{ border-color:var(--green); background:var(--green-bg); }
+
+  /* 期初向导 */
+  .setup-count{ text-align:center; font-size:.95rem; color:var(--muted); padding:.5rem; }
+  .setup-count b{ color:var(--green-ink); font-size:1.3rem; }
+  .fieldbox{ margin:0 .9rem .6rem; }
+  .fieldbox label{ display:block; font-size:.85rem; color:var(--muted); margin-bottom:.3rem; }
+  .fieldbox input{ width:100%; border:1.5px solid var(--line); border-radius:12px; padding:.75rem .9rem; font-size:1.15rem; background:var(--card); }
+  .fieldbox input:focus{ border-color:var(--green); outline:none; }
+
+  /* 确认弹层 */
+  .confirm-body{ padding:.4rem 1.2rem 1rem; font-size:1.05rem; line-height:1.6; }
+  .confirm-actions{ display:grid; grid-template-columns:1fr 1fr; gap:.6rem; padding:0 .9rem .9rem; }
+</style>
+
+<div class="stage">
+  <aside class="stage-note">
+    <span class="tag">交互原型 · 可点击</span>
+    <h1>记账本</h1>
+    <p>给不熟悉手机的经营者做的应收欠款账本。全部数据为演示假数据。</p>
+    <p>请重点体验：记一笔 → 今天页出现流水 → 客户页找人 → 详情页「收款」（试试少收，勾抹零结清）。</p>
+    <p>「我的」页可切换字体大小、体验期初建档。</p>
+    <p>手机浏览器打开本页即为全屏 App 体验。</p>
+  </aside>
+
+  <div class="phone" id="phone">
+
+    <!-- ════════ 页1 · 记一笔 ════════ -->
+    <main class="page active" id="page-record">
+      <div class="pagehead"><h2>记一笔</h2><span class="sub" id="rec-now"></span></div>
+      <div class="datebar" id="datebar">
+        <button class="datechip active" data-d="0">今天</button>
+        <button class="datechip" data-d="-1">昨天</button>
+        <button class="datechip" data-d="pick">选日子</button>
+        <input type="date" id="datepick" style="position:absolute;opacity:0;width:1px;height:1px;">
+      </div>
+      <div class="card">
+        <div class="field-label">谁的账</div>
+        <button class="picker-row" id="btn-pick-cust">
+          <span class="val empty" id="rec-cust-label">点这里选客户</span>
+          <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+      <div class="card">
+        <div class="field-label">什么业务</div>
+        <div class="bizgrid" id="bizgrid"></div>
+      </div>
+      <div class="card">
+        <div class="field-label">多少钱</div>
+        <div class="amount-display">
+          <span class="cny">¥</span>
+          <input class="amt-input" id="rec-amt-input" inputmode="decimal" placeholder="0" autocomplete="off" aria-label="金额">
+        </div>
+        <div class="amt-hint">点一下，用手机键盘输数字</div>
+      </div>
+      <div class="savebar"><button class="btn btn-primary" style="width:100%" id="btn-save">记 上</button></div>
+    </main>
+
+    <!-- ════════ 页2 · 今天 ════════ -->
+    <main class="page" id="page-today">
+      <div class="pagehead"><h2>流水</h2><span class="sub">点某一笔可以改、删</span></div>
+      <div class="daynav">
+        <button class="arrow" id="day-prev" aria-label="前一天">←</button>
+        <button class="d num" id="day-label">今天</button>
+        <button class="arrow" id="day-next" aria-label="后一天">→</button>
+      </div>
+      <div class="card" id="today-list"></div>
+      <div id="today-photos"></div>
+    </main>
+
+    <!-- ════════ 页3 · 客户 ════════ -->
+    <main class="page" id="page-cust">
+      <div class="pagehead"><h2>客户</h2><span class="sub num" id="cust-count"></span></div>
+      <div class="searchbox">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="cust-search" placeholder="找人：名字 / 拼音 / 首字母" autocomplete="off">
+      </div>
+      <div class="chips">
+        <button class="chip active" data-f="all">全部</button>
+        <button class="chip" data-f="owe">有欠款的</button>
+        <button class="chip" data-sort="bal">按欠款多少</button>
+      </div>
+      <div id="cust-list"></div>
+      <div style="height:4.5rem"></div>
+    </main>
+    <button class="fab" id="fab-add" hidden>＋ 新客户</button>
+
+    <!-- ════════ 页4 · 我的 ════════ -->
+    <main class="page" id="page-mine">
+      <div class="pagehead"><h2>我的</h2></div>
+      <div class="warnbar" hidden id="backup-warn">已经 3 天没备份成功了，建议现在备份一次。</div>
+      <div class="card">
+        <div class="row mine-item">
+          <div class="grow"><div class="t">自动备份</div><div class="s" id="backup-time">上次备份：今天 06:12 · 已存 60 份</div></div>
+          <span class="badge-ok">已开启</span>
+        </div>
+        <div class="row mine-item" style="gap:.6rem">
+          <button class="btn btn-primary grow" id="btn-send-backup" style="min-height:2.8rem;font-size:1rem">发送备份给家人</button>
+          <button class="btn btn-ghost" id="btn-restore" style="min-height:2.8rem;font-size:1rem;padding:0 .9rem">从备份恢复</button>
+        </div>
+      </div>
+      <div class="card">
+        <button class="row mine-item" style="width:100%;text-align:left" id="btn-setup">
+          <div class="grow"><div class="t">期初建档（录旧账）</div><div class="s">把纸账本上每个人现在的欠款录进来 · 已录 <span class="num" id="setup-n">0</span> 人</div></div>
+          <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B9B5A6" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button class="row mine-item" style="width:100%;text-align:left" id="btn-bizset">
+          <div class="grow"><div class="t">业务字典</div><div class="s" id="bizset-sub"></div></div>
+          <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B9B5A6" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <div class="row mine-item">
+          <div class="grow"><div class="t">字体大小</div></div>
+          <div class="seg" id="fontseg">
+            <button data-s="std" class="active">标准</button><button data-s="big">大</button><button data-s="huge">特大</button>
+          </div>
+        </div>
+        <button class="row mine-item" style="width:100%;text-align:left" id="btn-trash">
+          <div class="grow"><div class="t">回收站</div><div class="s">删掉的账和客户都在这里，可以找回</div></div>
+          <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B9B5A6" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+      <div class="card">
+        <div class="row mine-item"><div class="grow"><div class="t">关于</div><div class="s num" id="about-line"></div></div></div>
+      </div>
+      <p style="text-align:center;font-size:.78rem;color:#A7A392;padding:0 2rem 1rem;line-height:1.6">交互原型 · 演示数据非真实<br>数据只存在这台手机里，不上传任何网络</p>
+    </main>
+
+    <!-- ════════ 底部导航 ════════ -->
+    <nav class="tabbar">
+      <button class="tab active" data-page="record">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span>记一笔</span></button>
+      <button class="tab" data-page="today">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+        <span>流水</span></button>
+      <button class="tab" data-page="cust">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3.4"/><path d="M2.5 20c.8-3.4 3.4-5 6.5-5s5.7 1.6 6.5 5"/><circle cx="17.5" cy="9.5" r="2.6"/><path d="M16.5 15.2c2.8.2 4.6 1.7 5 4.8"/></svg>
+        <span>客户</span></button>
+      <button class="tab" data-page="mine">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 00-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 00-2-1.2L14.2 3h-4l-.4 2.5a7 7 0 00-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 005.4 12a7 7 0 00.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 002 1.2l.4 2.5h4l.4-2.5a7 7 0 002-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z"/></svg>
+        <span>我的</span></button>
+    </nav>
+
+    <!-- ════════ 覆盖层 ════════ -->
+    <div class="scrim" id="scrim"></div>
+
+    <!-- 选客户面板 -->
+    <div class="panel" id="panel-pick">
+      <div class="panel-head">
+        <button class="backbtn" data-close="panel-pick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>返回</button>
+        <h3>选客户</h3>
+        <button class="backbtn" id="pick-new" style="font-weight:650">＋ 新客户</button>
+      </div>
+      <div class="searchbox" style="margin-top:.2rem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="pick-search" placeholder="名字 / 拼音 / 首字母，如 zls" autocomplete="off">
+      </div>
+      <div style="flex:1;overflow-y:auto" id="pick-list"></div>
+    </div>
+
+    <!-- 客户详情面板 -->
+    <div class="panel" id="panel-detail">
+      <div class="panel-head">
+        <button class="backbtn" data-close="panel-detail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>返回</button>
+        <h3>客户账页</h3>
+        <span style="width:3.4rem"></span>
+      </div>
+      <div style="flex:1;overflow-y:auto" id="detail-body"></div>
+    </div>
+
+    <!-- 新建客户 -->
+    <div class="sheet" id="sheet-newcust">
+      <div class="sheet-head"><h3>新客户</h3><button class="sheet-close" data-close="sheet-newcust">收起</button></div>
+      <div class="fieldbox"><label>怎么称呼（照账本上写）</label><input id="nc-name" placeholder="比如：张老三"></div>
+      <div class="fieldbox"><label>备注（哪里的人 / 干什么的，防重名）</label><input id="nc-note" placeholder="比如：东村，可不填"></div>
+      <div class="confirm-actions"><button class="btn btn-ghost" data-close="sheet-newcust">不建了</button><button class="btn btn-primary" id="nc-save">建 好</button></div>
+    </div>
+
+    <!-- 收款弹层 -->
+    <div class="sheet" id="sheet-settle">
+      <div class="sheet-head"><h3 id="settle-title">收款</h3><button class="sheet-close" data-close="sheet-settle">收起</button></div>
+      <div class="settle-owe">现在欠 <b class="num" id="settle-owe"></b></div>
+      <div class="amount-display" style="padding-top:.1rem">
+        <span class="cny">收 ¥</span>
+        <input class="amt-input" id="settle-amt-input" inputmode="decimal" placeholder="0" autocomplete="off" aria-label="实收金额">
+      </div>
+      <div class="settle-remain" id="settle-remain"></div>
+      <label class="wipecheck" id="wipe-row" hidden>
+        <input type="checkbox" id="wipe-check">
+        <span>剩下的 <b class="num" id="wipe-n"></b> 不要了（抹零），这次<b>结清</b></span>
+      </label>
+      <div class="savebar"><button class="btn btn-primary" style="width:100%" id="settle-save">收 好</button></div>
+    </div>
+
+    <!-- 流水操作 / 通用确认 -->
+    <div class="sheet" id="sheet-confirm">
+      <div class="sheet-head"><h3 id="cf-title">请确认</h3><button class="sheet-close" data-close="sheet-confirm">收起</button></div>
+      <div class="confirm-body" id="cf-body"></div>
+      <div class="confirm-actions"><button class="btn btn-ghost" id="cf-no">先不</button><button class="btn btn-primary" id="cf-yes">确 认</button></div>
+    </div>
+
+    <!-- 期初建档 -->
+    <div class="panel" id="panel-setup">
+      <div class="panel-head">
+        <button class="backbtn" data-close="panel-setup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>先退出</button>
+        <h3>期初建档</h3><span style="width:3.4rem"></span>
+      </div>
+      <div class="setup-count">照着旧账本，一人一录 · 已录 <b class="num" id="setup-count">0</b> 人</div>
+      <div class="fieldbox"><label>怎么称呼</label><input id="su-name" placeholder="比如：赵满仓"></div>
+      <div class="fieldbox"><label>备注（防重名，可不填）</label><input id="su-note" placeholder="比如：赵庄"></div>
+      <div class="fieldbox"><label>现在欠多少钱（没欠填 0）</label><input id="su-amt" inputmode="decimal" placeholder="比如：1350"></div>
+      <div class="savebar"><button class="btn btn-primary" style="width:100%" id="su-save">存好，录下一位</button></div>
+      <p style="text-align:center;color:#A7A392;font-size:.85rem;padding:0 2rem;line-height:1.6">只录现在欠的总数就行，以前一笔笔的旧账留在纸本上备查。</p>
+    </div>
+
+    <!-- 业务面板（选择 / 字典管理） -->
+    <div class="panel" id="panel-biz">
+      <div class="panel-head">
+        <button class="backbtn" data-close="panel-biz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>返回</button>
+        <h3 id="biz-title">选业务</h3>
+        <button class="backbtn" id="biz-new" style="font-weight:650">＋ 新业务</button>
+      </div>
+      <div class="searchbox" style="margin-top:.2rem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="biz-search" placeholder="找业务，比如：加工" autocomplete="off">
+      </div>
+      <div style="flex:1;overflow-y:auto" id="biz-list"></div>
+    </div>
+
+    <!-- 新建业务 -->
+    <div class="sheet" id="sheet-newbiz">
+      <div class="sheet-head"><h3>新业务</h3><button class="sheet-close" data-close="sheet-newbiz">收起</button></div>
+      <div class="fieldbox"><label>这个业务叫什么</label><input id="nb-name" placeholder="比如：包装"></div>
+      <div class="confirm-actions"><button class="btn btn-ghost" data-close="sheet-newbiz">不建了</button><button class="btn btn-primary" id="nb-save">建 好</button></div>
+    </div>
+
+    <!-- 改一笔流水 -->
+    <div class="sheet" id="sheet-edit">
+      <div class="sheet-head"><h3>改这笔账</h3><button class="sheet-close" data-close="sheet-edit">收起</button></div>
+      <p style="margin:.1rem 1.1rem .5rem;font-size:.95rem;color:var(--muted)" id="ed-info"></p>
+      <div class="fieldbox"><label>金额（元）</label><input id="ed-amt" inputmode="decimal" autocomplete="off"></div>
+      <div class="fieldbox"><label>哪天的账</label><input id="ed-date" type="date"></div>
+      <p style="margin:0 1.1rem .5rem;font-size:.8rem;color:#A7A392">正式版这里还能改业务、换客户</p>
+      <div class="confirm-actions"><button class="btn btn-danger-ghost" id="ed-del">删掉这笔</button><button class="btn btn-primary" id="ed-save">保存修改</button></div>
+    </div>
+
+    <!-- 账单预览 -->
+    <div class="panel" id="panel-bill">
+      <div class="panel-head">
+        <button class="backbtn" data-close="panel-bill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>返回</button>
+        <h3>账单预览</h3><span style="width:3.4rem"></span>
+      </div>
+      <div style="flex:1;overflow-y:auto" id="bill-body"></div>
+      <div class="savebar"><button class="btn btn-primary" style="width:100%" id="bill-send">存成图片，发微信给他</button></div>
+    </div>
+
+    <!-- 回收站 -->
+    <div class="panel" id="panel-trash">
+      <div class="panel-head">
+        <button class="backbtn" data-close="panel-trash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>返回</button>
+        <h3>回收站</h3><span style="width:3.4rem"></span>
+      </div>
+      <div style="flex:1;overflow-y:auto" id="trash-list"></div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+
+<script>
+/* ═══════════ 演示数据 ═══════════ */
+const fmtD = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const today = new Date(); const TODAY = fmtD(today);
+const daysAgo = n => { const d = new Date(); d.setDate(d.getDate()-n); return fmtD(d); };
+
+let CID = 1, EID = 1;
+const customers = [];
+const entries = [];
+function addCust(name, note, abbr, full){ const c = {id:CID++, name, note, abbr, full, deleted:false}; customers.push(c); return c; }
+function addEntry(cid, kind, business, amount, date){ const e = {id:EID++, cid, kind, business, amount, date, time:'', deleted:false}; entries.push(e); return e; }
+
+const c1=addCust('张老三','东村','zls','zhanglaosan'), c2=addCust('李桂芳','小卖部','lgf','liguifang'),
+c3=addCust('王建国','开货车的','wjg','wangjianguo'), c4=addCust('刘婶','北头','ls','liushen'),
+c5=addCust('陈立冬','','cld','chenlidong'), c6=addCust('赵满仓','赵庄','zmc','zhaomancang'),
+c7=addCust('孙秀英','','sxy','sunxiuying'), c8=addCust('老周','收废品的','lz','laozhou'),
+c9=addCust('马文才','马家湾','mwc','mawencai'), c10=addCust('胡春妮','','hcn','huchunni'),
+c11=addCust('郑大有','','zdy','zhengdayou'), c12=addCust('吴二嫂','','wes','wuersao'),
+c13=addCust('钱广发','集上','qgf','qianguangfa'), c14=addCust('杨树林','杨庄','ysl','yangshulin');
+
+addEntry(c1.id,'initial','',860, daysAgo(40));
+addEntry(c1.id,'debt','送货',350, daysAgo(6)); addEntry(c1.id,'debt','材料',120, daysAgo(3));
+addEntry(c1.id,'payment','',500, daysAgo(2)); addEntry(c1.id,'debt','送货',410, TODAY);
+addEntry(c2.id,'initial','',230, daysAgo(40)); addEntry(c2.id,'debt','拉货',80, daysAgo(1)); addEntry(c2.id,'debt','送货',65, TODAY);
+addEntry(c3.id,'initial','',2400, daysAgo(40)); addEntry(c3.id,'debt','加工',600, daysAgo(9)); addEntry(c3.id,'payment','',1000, daysAgo(5));
+addEntry(c4.id,'initial','',45, daysAgo(40)); addEntry(c4.id,'payment','',40, daysAgo(12)); addEntry(c4.id,'discount','',5, daysAgo(12));
+addEntry(c5.id,'debt','人工',300, daysAgo(2)); addEntry(c5.id,'debt','材料',95, TODAY);
+addEntry(c6.id,'initial','',1350, daysAgo(40)); addEntry(c6.id,'debt','送货',220, daysAgo(4));
+addEntry(c7.id,'initial','',75, daysAgo(40));
+addEntry(c8.id,'initial','',520, daysAgo(40)); addEntry(c8.id,'debt','拉货',140, TODAY);
+addEntry(c9.id,'initial','',990, daysAgo(40)); addEntry(c9.id,'payment','',990, daysAgo(20));
+addEntry(c10.id,'debt','加工',260, daysAgo(1));
+addEntry(c11.id,'initial','',430, daysAgo(40));
+addEntry(c12.id,'initial','',68, daysAgo(40)); addEntry(c12.id,'debt','送货',52, TODAY);
+addEntry(c13.id,'initial','',1780, daysAgo(40)); addEntry(c13.id,'payment','',800, daysAgo(15));
+addEntry(c14.id,'initial','',310, daysAgo(40));
+
+let bizList = [
+  {name:'送货', uses:42},{name:'拉货', uses:31},{name:'加工', uses:18},
+  {name:'材料', uses:12},{name:'人工', uses:9},{name:'包装', uses:5},
+  {name:'运费', uses:3},{name:'修理', uses:2},{name:'定金', uses:1}
+];
+let bizMode = 'pick'; // pick=记账时选择 / manage=字典管理
+let setupCount = 0;
+let DPID = 3;
+let dayPhotos = [ {id:1, date:daysAgo(1)}, {id:2, date:daysAgo(2)} ]; // v1.5 按天纸本照片（演示）
+
+/* ═══════════ 工具 ═══════════ */
+const $ = s => document.querySelector(s);
+const KINDS = { initial:['初','期初旧账'], debt:['记','记账'], payment:['收','收款'], discount:['抹','抹零'] };
+const fmt = n => { const s = (Math.round(n*100)/100).toLocaleString('zh-CN',{maximumFractionDigits:2}); return s; };
+const balOf = cid => entries.filter(e=>!e.deleted&&e.cid===cid)
+  .reduce((s,e)=> s + ((e.kind==='debt'||e.kind==='initial')? e.amount : -e.amount), 0);
+const custOf = id => customers.find(c=>c.id===id);
+const dateCN = ds => { if(ds===TODAY) return '今天'; if(ds===daysAgo(1)) return '昨天';
+  const [y,m,d]=ds.split('-'); return `${+m}月${+d}日`; };
+
+let toastTimer;
+function toast(msg, undoFn){
+  const t=$('#toast'); t.innerHTML='';
+  const s=document.createElement('span'); s.textContent=msg; t.appendChild(s);
+  if(undoFn){
+    const b=document.createElement('button'); b.className='undo'; b.textContent='撤销'; b.type='button';
+    b.addEventListener('click', ()=>{ t.classList.remove('show'); undoFn(); });
+    t.appendChild(b);
+  }
+  t.classList.toggle('has-undo', !!undoFn);
+  t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'), undoFn?5000:2600);
+}
+
+/* 覆盖层开关 */
+const scrim = $('#scrim'); let openLayers = [];
+/* scrim 永远垫在最上层弹层的正下方：sheet(50)→49，panel(45)→44 */
+function syncScrim(){
+  if(!openLayers.length){ scrim.classList.remove('show'); return; }
+  const top = document.getElementById(openLayers[openLayers.length-1]);
+  scrim.style.zIndex = top.classList.contains('sheet') ? 49 : 44;
+  scrim.classList.add('show');
+}
+function openLayer(id){ const el=document.getElementById(id); el.classList.add('show');
+  if(!openLayers.includes(id)) openLayers.push(id); syncScrim(); }
+function closeLayer(id){ const el=document.getElementById(id); el.classList.remove('show');
+  openLayers = openLayers.filter(x=>x!==id); syncScrim(); }
+scrim.addEventListener('click', ()=>{ if(openLayers.length) closeLayer(openLayers[openLayers.length-1]); });
+document.querySelectorAll('[data-close]').forEach(b=> b.addEventListener('click', ()=>closeLayer(b.dataset.close)));
+
+/* 通用确认 */
+let cfCb = null;
+function confirmBox(title, bodyHTML, yesText, cb){
+  $('#cf-title').textContent = title; $('#cf-body').innerHTML = bodyHTML;
+  $('#cf-yes').textContent = yesText; cfCb = cb; openLayer('sheet-confirm');
+}
+$('#cf-yes').addEventListener('click', ()=>{ closeLayer('sheet-confirm'); cfCb && cfCb(); });
+$('#cf-no').addEventListener('click', ()=> closeLayer('sheet-confirm'));
+
+/* ═══════════ Tab 切换 ═══════════ */
+const pages = { record:'#page-record', today:'#page-today', cust:'#page-cust', mine:'#page-mine' };
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t===tab));
+    Object.entries(pages).forEach(([k,sel])=> $(sel).classList.toggle('active', k===tab.dataset.page));
+    $('#fab-add').hidden = tab.dataset.page!=='cust';
+    if(tab.dataset.page==='today') renderToday();
+    if(tab.dataset.page==='cust') renderCust();
+  });
+});
+
+/* ═══════════ 金额输入（系统键盘 + 过滤） ═══════════ */
+function sanitizeAmt(el){
+  let v = el.value.replace(/[^\d.]/g,'');
+  const i = v.indexOf('.');
+  if(i > -1){ v = v.slice(0,i+1) + v.slice(i+1).replace(/\./g,''); const [a,b] = v.split('.'); v = a + '.' + (b||'').slice(0,2); }
+  if(v.replace('.','').length > 7) v = el.value.slice(0,-1);
+  if(el.value !== v) el.value = v;
+}
+
+/* ═══════════ 记一笔 ═══════════ */
+let recCust = null, recBiz = null, recDate = TODAY;
+$('#rec-now').textContent = `${today.getMonth()+1}月${today.getDate()}日`;
+$('#rec-amt-input').addEventListener('input', e=> sanitizeAmt(e.target));
+
+function bumpBiz(name){
+  const bz = bizList.find(b=>b.name===name);
+  if(bz) bz.uses++; else bizList.push({name, uses:1});
+  renderBizGrid();
+}
+function renderBizGrid(){
+  const g = $('#bizgrid'); g.innerHTML='';
+  const top = [...bizList].sort((a,b)=>b.uses-a.uses).slice(0,5);
+  top.forEach(bz=>{
+    const b=document.createElement('button'); b.className='bizbtn'; b.textContent=bz.name; b.type='button';
+    if(recBiz===bz.name) b.classList.add('active');
+    b.addEventListener('click', ()=>{ recBiz=bz.name; renderBizGrid(); });
+    g.appendChild(b);
+  });
+  const more=document.createElement('button'); more.className='bizbtn'; more.type='button';
+  const inTop = top.some(z=>z.name===recBiz);
+  more.textContent = (recBiz && !inTop) ? recBiz : '更多…';
+  if(recBiz && !inTop) more.classList.add('active');
+  more.addEventListener('click', ()=>{
+    bizMode='pick'; $('#biz-title').textContent='选业务';
+    $('#biz-search').value=''; renderBizPanel(''); openLayer('panel-biz');
+  });
+  g.appendChild(more);
+  $('#bizset-sub').textContent = [...bizList].sort((a,b)=>b.uses-a.uses).slice(0,4).map(b=>b.name).join('、') + ' 等 ' + bizList.length + ' 项';
+}
+
+/* ═══════════ 业务面板 ═══════════ */
+function renderBizPanel(q){
+  q = q.trim();
+  const box = $('#biz-list'); box.innerHTML='';
+  const list = [...bizList].filter(b=>!q || b.name.includes(q)).sort((a,b)=>b.uses-a.uses);
+  const card=document.createElement('div'); card.className='card'; card.style.marginTop='.5rem';
+  list.forEach(bz=>{
+    const b=document.createElement('button'); b.className='row'; b.style.width='100%'; b.style.textAlign='left'; b.type='button';
+    b.setAttribute('aria-label', bz.name);
+    b.innerHTML = `<div class="grow"><div class="cust-name">${bz.name}</div></div>` +
+      (bizMode==='manage' ? `<span style="font-size:.82rem;color:var(--muted)" class="num">用过 ${bz.uses} 次</span>` : '');
+    b.addEventListener('click', ()=>{
+      if(bizMode==='pick'){ recBiz = bz.name; renderBizGrid(); closeLayer('panel-biz'); }
+      else toast('正式版这里可以改名、删除（历史账不受影响）');
+    });
+    card.appendChild(b);
+  });
+  if(!list.length) card.innerHTML = '<div class="empty-hint">没有这个业务，点右上角「＋ 新业务」</div>';
+  box.appendChild(card);
+}
+$('#biz-search').addEventListener('input', e=> renderBizPanel(e.target.value));
+$('#biz-new').addEventListener('click', ()=>{ $('#nb-name').value=''; openLayer('sheet-newbiz'); });
+$('#nb-save').addEventListener('click', ()=>{
+  const name = $('#nb-name').value.trim();
+  if(!name){ toast('名字还没写'); return; }
+  if(bizList.some(b=>b.name===name)){ toast('已经有这个业务了，直接选就行'); return; }
+  bizList.push({name, uses:0});
+  closeLayer('sheet-newbiz');
+  renderBizPanel($('#biz-search').value); renderBizGrid();
+  if(bizMode==='pick'){ recBiz=name; renderBizGrid(); closeLayer('panel-biz'); }
+  toast(`新业务「${name}」建好了`);
+});
+
+$('#datebar').addEventListener('click', e=>{
+  const chip = e.target.closest('.datechip'); if(!chip) return;
+  if(chip.dataset.d==='pick'){ $('#datepick').showPicker ? $('#datepick').showPicker() : $('#datepick').click(); return; }
+  recDate = chip.dataset.d==='0' ? TODAY : daysAgo(1);
+  document.querySelectorAll('.datechip').forEach(c=>c.classList.toggle('active', c===chip));
+  chip.dataset.d==='pick' || ($('#datebar [data-d="pick"]').textContent='选日子');
+});
+$('#datepick').addEventListener('change', e=>{
+  if(!e.target.value) return; recDate = e.target.value;
+  document.querySelectorAll('.datechip').forEach(c=>c.classList.remove('active'));
+  const pk = $('#datebar [data-d="pick"]'); pk.classList.add('active'); pk.textContent = dateCN(recDate);
+});
+
+$('#btn-pick-cust').addEventListener('click', ()=>{ pickMode='record'; $('#pick-search').value=''; renderPickList(''); openLayer('panel-pick'); });
+
+$('#btn-save').addEventListener('click', ()=>{
+  if(!recCust){ toast('还没选客户 — 点最上面「谁的账」'); return; }
+  if(!recBiz){ toast('还没选业务'); return; }
+  const input = $('#rec-amt-input');
+  const n = parseFloat(input.value);
+  if(!n){ toast('还没输金额'); return; }
+  const c=recCust, biz=recBiz, dt=recDate, amtStr=input.value;
+  const e = addEntry(c.id, 'debt', biz, n, dt);
+  bumpBiz(biz);
+  renderToday(); renderCust();
+  toast(`已记上：${c.name} ${biz} ¥${fmt(n)}${dt!==TODAY ? '（'+dateCN(dt)+'）':''}`, ()=>{
+    entries.splice(entries.indexOf(e),1);
+    recCust=c; recBiz=biz; input.value=amtStr;
+    const lb=$('#rec-cust-label'); lb.textContent=c.name+(c.note?'（'+c.note+'）':''); lb.classList.remove('empty');
+    renderBizGrid(); renderToday(); renderCust();
+    toast('已撤销，这笔没记');
+  });
+  input.value=''; recCust=null;
+  const lb=$('#rec-cust-label'); lb.textContent='点这里选客户'; lb.classList.add('empty');
+});
+
+/* ═══════════ 选客户面板 ═══════════ */
+let pickMode = 'record';
+function lastDealMap(){
+  const m = {};
+  entries.filter(e=>!e.deleted).forEach(e=>{ if(!m[e.cid] || e.date>m[e.cid]) m[e.cid]=e.date; });
+  return m;
+}
+function renderPickList(q){
+  q = q.trim().toLowerCase();
+  const box = $('#pick-list'); box.innerHTML='';
+  let list = customers.filter(c=>!c.deleted);
+  if(q) list = list.filter(c=> c.name.includes(q) || c.abbr.startsWith(q) || c.full.startsWith(q));
+  if(!q){
+    const m = lastDealMap();
+    const recent = [...list].filter(c=>m[c.id]).sort((a,b)=> m[b.id]<m[a.id]?-1:1).slice(0,6);
+    if(recent.length){
+      const gl=document.createElement('div'); gl.className='group-label'; gl.textContent='最近打交道的'; box.appendChild(gl);
+      const card=document.createElement('div'); card.className='card'; card.style.margin='0 .8rem .4rem';
+      recent.forEach(c=> card.appendChild(pickRow(c))); box.appendChild(card);
+      const gl2=document.createElement('div'); gl2.className='group-label'; gl2.textContent='全部客户'; box.appendChild(gl2);
+    }
+  }
+  const card2=document.createElement('div'); card2.className='card'; card2.style.margin='0 .8rem 1rem';
+  [...list].sort((a,b)=> a.full<b.full?-1:1).forEach(c=> card2.appendChild(pickRow(c)));
+  if(!list.length){ card2.innerHTML='<div class="empty-hint">没找到，点右上角「＋ 新客户」</div>'; }
+  box.appendChild(card2);
+}
+function pickRow(c){
+  const b=document.createElement('button'); b.className='row'; b.style.width='100%'; b.style.textAlign='left'; b.type='button';
+  const bal = balOf(c.id);
+  b.setAttribute('aria-label', c.name + (c.note?'（'+c.note+'）':''));
+  b.innerHTML = `<div class="grow"><div class="cust-name">${c.name}</div>${c.note?`<div class="cust-note">${c.note}</div>`:''}</div>
+    <div class="cust-bal">${bal>0?`<span class="n owe num">欠 ${fmt(bal)}</span>`:bal<0?`<span class="n over num">多付 ${fmt(-bal)}</span>`:'<span class="n zero">没欠账</span>'}</div>`;
+  b.addEventListener('click', ()=>{
+    if(pickMode==='record'){
+      recCust = c; const lb=$('#rec-cust-label'); lb.textContent = c.name + (c.note? '（'+c.note+'）':''); lb.classList.remove('empty');
+      closeLayer('panel-pick');
+    }
+  });
+  return b;
+}
+$('#pick-search').addEventListener('input', e=> renderPickList(e.target.value));
+$('#pick-new').addEventListener('click', ()=>{ $('#nc-name').value=''; $('#nc-note').value=''; openLayer('sheet-newcust'); });
+$('#nc-save').addEventListener('click', ()=>{
+  const name = $('#nc-name').value.trim(); if(!name){ toast('名字还没写'); return; }
+  const same = customers.filter(c=>!c.deleted && c.name===name);
+  const doAdd = ()=>{
+    const c = addCust(name, $('#nc-note').value.trim(), '', name);
+    closeLayer('sheet-newcust'); toast(`新客户「${name}」建好了`);
+    renderPickList($('#pick-search').value); renderCust();
+    if(openLayers.includes('panel-pick') && pickMode==='record'){
+      recCust=c; const lb=$('#rec-cust-label'); lb.textContent=c.name+(c.note?'（'+c.note+'）':''); lb.classList.remove('empty');
+      closeLayer('panel-pick');
+    }
+  };
+  if(same.length){
+    confirmBox('已经有同名客户', `账本里已有 <b>${same.length}</b> 位「${name}」（${same.map(c=>c.note||'没备注').join('、')}）。<br>确定是另一个人、要再建一位吗？建议在备注里写清区别。`, '是另一人，建', doAdd);
+  } else doAdd();
+});
+
+/* ═══════════ 今天 / 流水 ═══════════ */
+let viewDate = TODAY;
+function renderToday(){
+  $('#day-label').textContent = dateCN(viewDate);
+  renderDayPhotos();
+  const list = entries.filter(e=>!e.deleted && e.date===viewDate).sort((a,b)=>b.id-a.id);
+  const box = $('#today-list'); box.innerHTML='';
+  if(!list.length){ box.innerHTML = `<div class="empty-hint">${dateCN(viewDate)}还没记账</div>`; return; }
+  let debtSum=0, paySum=0;
+  list.forEach(e=>{
+    if(e.kind==='debt'||e.kind==='initial') debtSum+=e.amount; else paySum+=e.amount;
+    const c = custOf(e.cid); const [zh] = KINDS[e.kind];
+    const b=document.createElement('button'); b.className='row'; b.style.width='100%'; b.style.textAlign='left'; b.type='button';
+    b.innerHTML = `<span class="stamp ${e.kind}">${zh}</span>
+      <div class="grow"><div class="entry-main">${c.name}${c.note?`<small style="color:var(--muted);font-size:.8rem;font-weight:400">${c.note}</small>`:''}</div>
+      <div class="entry-sub">${e.kind==='debt'? e.business : KINDS[e.kind][1]}</div></div>
+      <span class="entry-amt num ${e.kind==='debt'||e.kind==='initial'?'pos':'neg'}">${e.kind==='debt'||e.kind==='initial'?'+':'−'}${fmt(e.amount)}</span>`;
+    b.addEventListener('click', ()=> entryMenu(e));
+    box.appendChild(b);
+  });
+  const sum=document.createElement('div'); sum.className='sumline num';
+  sum.innerHTML = `<span>共 ${list.length} 笔</span><span>记了 ¥${fmt(debtSum)} · 收了 ¥${fmt(paySum)}</span>`;
+  box.appendChild(sum);
+}
+/* v1.5 · 当天纸本照片 */
+function renderDayPhotos(){
+  const box = $('#today-photos'); box.innerHTML='';
+  const label=document.createElement('div'); label.className='field-label'; label.style.paddingLeft='1.1rem';
+  label.textContent='当天的纸本照片（留痕备查）';
+  box.appendChild(label);
+  const strip=document.createElement('div'); strip.className='photo-strip';
+  dayPhotos.filter(p=>p.date===viewDate).forEach(p=>{
+    const t=document.createElement('button'); t.className='photo-thumb'; t.type='button';
+    t.dataset.d = dateCN(p.date);
+    t.setAttribute('aria-label', `${dateCN(p.date)}的纸本照片`);
+    t.innerHTML='<i></i><i></i><i></i><i></i><i></i><i></i>';
+    t.addEventListener('click', ()=> confirmBox('这张纸本照片',
+      `${dateCN(p.date)}拍的账本页。<br><span style="color:var(--muted);font-size:.9rem">正式版点开可放大看原件字迹；照片只存在手机里，不进备份文件。</span>`,
+      '删掉这张', ()=>{ dayPhotos=dayPhotos.filter(x=>x!==p); renderDayPhotos(); toast('删掉了这张照片（回收站可找回）'); }));
+    strip.appendChild(t);
+  });
+  const add=document.createElement('button'); add.className='photo-add'; add.type='button';
+  add.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8a2 2 0 012-2h2l1.2-1.8A2 2 0 0110 3.4h4a2 2 0 011.8.8L17 6h2a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/><circle cx="12" cy="13" r="3.6"/></svg><span>拍一张</span>';
+  add.setAttribute('aria-label','拍一张当天的纸本');
+  add.addEventListener('click', ()=>{
+    dayPhotos.push({id:DPID++, date:viewDate});
+    renderDayPhotos();
+    toast(`拍好了，挂在${dateCN(viewDate)}名下（正式版会打开相机）`);
+  });
+  strip.appendChild(add);
+  box.appendChild(strip);
+}
+let editEntry = null;
+function renderAfterEdit(){
+  renderToday(); renderCust();
+  if(openLayers.includes('panel-detail')) renderDetail();
+}
+function entryMenu(e){
+  editEntry = e;
+  const c = custOf(e.cid);
+  $('#ed-info').textContent = `${c.name} · ${e.kind==='debt'? e.business : KINDS[e.kind][1]} · ${dateCN(e.date)} · 原来 ¥${fmt(e.amount)}`;
+  $('#ed-amt').value = String(e.amount);
+  $('#ed-date').value = e.date;
+  openLayer('sheet-edit');
+}
+$('#ed-amt').addEventListener('input', e=> sanitizeAmt(e.target));
+$('#ed-save').addEventListener('click', ()=>{
+  const n = parseFloat($('#ed-amt').value);
+  if(!n){ toast('金额不能是 0'); return; }
+  editEntry.amount = n;
+  if($('#ed-date').value) editEntry.date = $('#ed-date').value;
+  closeLayer('sheet-edit');
+  renderAfterEdit();
+  toast(`改好了：${custOf(editEntry.cid).name} ¥${fmt(n)}`);
+});
+$('#ed-del').addEventListener('click', ()=>{
+  const e = editEntry, c = custOf(e.cid);
+  closeLayer('sheet-edit');
+  confirmBox('删掉这笔账', `${dateCN(e.date)} · ${c.name} · ${e.kind==='debt'? e.business : KINDS[e.kind][1]} · <b class="num">¥${fmt(e.amount)}</b><br>删掉后可以在回收站找回。`, '删 掉', ()=>{
+    e.deleted = true; renderAfterEdit();
+    toast(`删掉了：${c.name} ¥${fmt(e.amount)}（回收站可找回）`);
+  });
+});
+$('#day-prev').addEventListener('click', ()=>{ const d=new Date(viewDate); d.setDate(d.getDate()-1); viewDate=fmtD(d); renderToday(); });
+$('#day-next').addEventListener('click', ()=>{ const d=new Date(viewDate); d.setDate(d.getDate()+1); viewDate=fmtD(d); renderToday(); });
+
+/* ═══════════ 客户列表 ═══════════ */
+let custFilter='all', custSort='bal';
+function renderCust(){
+  const q = $('#cust-search').value.trim().toLowerCase();
+  let list = customers.filter(c=>!c.deleted);
+  $('#cust-count').textContent = `共 ${list.length} 人`;
+  if(q) list = list.filter(c=> c.name.includes(q) || c.abbr.startsWith(q) || c.full.startsWith(q));
+  const withBal = list.map(c=>({c, bal:balOf(c.id)}));
+  let show = custFilter==='owe' ? withBal.filter(x=>x.bal>0) : withBal;
+  show = custSort==='bal' ? show.sort((a,b)=>b.bal-a.bal) : show.sort((a,b)=> a.c.full<b.c.full?-1:1);
+  const box=$('#cust-list'); box.innerHTML='';
+  const card=document.createElement('div'); card.className='card';
+  const oweTotal = withBal.reduce((s,x)=> s + Math.max(x.bal,0), 0);
+  show.forEach(({c,bal})=>{
+    const b=document.createElement('button'); b.className='row'; b.style.width='100%'; b.style.textAlign='left'; b.type='button';
+    b.setAttribute('aria-label', c.name + (c.note?'（'+c.note+'）':''));
+    b.innerHTML = `<div class="grow"><div class="cust-name">${c.name}</div>${c.note?`<div class="cust-note">${c.note}</div>`:''}</div>
+      <div class="cust-bal">${bal>0?`<span class="n owe num">欠 ${fmt(bal)}</span>`:bal<0?`<span class="n over num">多付 ${fmt(-bal)}</span>`:'<span class="n zero">已结清</span>'}</div>`;
+    b.addEventListener('click', ()=> openDetail(c.id));
+    card.appendChild(b);
+  });
+  if(!show.length) card.innerHTML='<div class="empty-hint">没找到这个人</div>';
+  box.appendChild(card);
+  const tip=document.createElement('p');
+  tip.style.cssText='text-align:center;font-size:.85rem;color:var(--muted);padding:0 1rem .4rem';
+  tip.className='num'; tip.textContent=`外面共欠着 ¥${fmt(oweTotal)}`;
+  box.appendChild(tip);
+}
+$('#cust-search').addEventListener('input', renderCust);
+document.querySelectorAll('.chip').forEach(chip=>{
+  chip.addEventListener('click', ()=>{
+    if(chip.dataset.f){ custFilter = chip.dataset.f;
+      document.querySelectorAll('.chip[data-f]').forEach(c=>c.classList.toggle('active', c===chip)); }
+    if(chip.dataset.sort){ custSort = custSort==='bal' ? 'py' : 'bal';
+      chip.textContent = custSort==='bal' ? '按欠款多少' : '按拼音'; }
+    renderCust();
+  });
+});
+$('#fab-add').addEventListener('click', ()=>{ pickMode='none'; $('#nc-name').value=''; $('#nc-note').value=''; openLayer('sheet-newcust'); });
+
+/* ═══════════ 客户详情 ═══════════ */
+let detailCid = null;
+function openDetail(cid){ detailCid = cid; renderDetail(); openLayer('panel-detail'); }
+function renderDetail(){
+  const c = custOf(detailCid); const bal = balOf(c.id);
+  const list = entries.filter(e=>!e.deleted && e.cid===c.id).sort((a,b)=> a.date<b.date?1:(a.date>b.date?-1:b.id-a.id));
+  const body = $('#detail-body');
+  body.innerHTML = `
+    <div class="balance-hero">
+      <div class="who">${c.name}${c.note?`<small>${c.note}</small>`:''}</div>
+      <div class="label">${bal>0?'现在欠':bal<0?'多付了':''}</div>
+      <div class="big num ${bal>0?'owe':bal<0?'over':'zero'}">${bal===0?'已结清 ✓':'¥ '+fmt(Math.abs(bal))}</div>
+    </div>
+    <div class="actions2">
+      <button class="btn btn-primary" id="d-settle" ${bal<=0?'disabled':''}>收 款</button>
+      <button class="btn btn-ghost" id="d-debt">记一笔账</button>
+    </div>
+    <div style="padding:0 .9rem .9rem"><button class="btn btn-ghost" id="d-bill" style="width:100%;min-height:2.7rem;font-size:1rem">发账单给他（微信图片）</button></div>
+    <div class="field-label" style="padding-left:1.1rem">一笔一笔的账（新的在上面，点某笔可改）</div>
+    <div class="card" id="d-list" style="margin-bottom:1rem"></div>`;
+  const lb = body.querySelector('#d-list');
+  list.forEach(e=>{
+    const [zh, full] = KINDS[e.kind];
+    const r=document.createElement('button'); r.className='row'; r.style.width='100%'; r.style.textAlign='left'; r.type='button';
+    r.setAttribute('aria-label', `${e.kind==='debt'? e.business : full} ${fmt(e.amount)}元`);
+    r.innerHTML = `<span class="stamp ${e.kind}">${zh}</span>
+      <div class="grow"><div class="entry-main">${e.kind==='debt'? e.business : full}</div>
+      <div class="entry-sub num">${dateCN(e.date)}</div></div>
+      <span class="entry-amt num ${e.kind==='debt'||e.kind==='initial'?'pos':'neg'}">${e.kind==='debt'||e.kind==='initial'?'+':'−'}${fmt(e.amount)}</span>`;
+    r.addEventListener('click', ()=> entryMenu(e));
+    lb.appendChild(r);
+  });
+  if(!list.length) lb.innerHTML='<div class="empty-hint">还没有账</div>';
+  body.querySelector('#d-settle').addEventListener('click', ()=> openSettle());
+  body.querySelector('#d-bill').addEventListener('click', ()=>{ renderBill(); openLayer('panel-bill'); });
+  body.querySelector('#d-debt').addEventListener('click', ()=>{
+    const c2 = custOf(detailCid);
+    recCust = c2; const lbl=$('#rec-cust-label'); lbl.textContent=c2.name+(c2.note?'（'+c2.note+'）':''); lbl.classList.remove('empty');
+    closeLayer('panel-detail');
+    document.querySelector('.tab[data-page="record"]').click();
+    toast(`给 ${c2.name} 记一笔账，选业务、输金额`);
+  });
+}
+
+/* ═══════════ 收款 ═══════════ */
+function openSettle(){
+  $('#settle-amt-input').value=''; renderSettle(); openLayer('sheet-settle');
+}
+function renderSettle(){
+  const bal = balOf(detailCid);
+  $('#settle-title').textContent = `收 ${custOf(detailCid).name} 的款`;
+  $('#settle-owe').textContent = `¥${fmt(bal)}`;
+  const n = parseFloat($('#settle-amt-input').value)||0;
+  const remain = Math.round((bal-n)*100)/100;
+  const r = $('#settle-remain'), wipeRow=$('#wipe-row');
+  if(!n){ r.innerHTML=''; wipeRow.hidden=true; $('#wipe-check').checked=false; }
+  else if(remain>0){ r.innerHTML=`收完还欠 <b class="owe num">¥${fmt(remain)}</b>`;
+    wipeRow.hidden=false; $('#wipe-n').textContent=`¥${fmt(remain)}`; wipeRow.classList.toggle('on', $('#wipe-check').checked); }
+  else if(remain===0){ r.innerHTML=`正好收清，这次<b style="color:var(--green-ink)">结清</b> ✓`; wipeRow.hidden=true; $('#wipe-check').checked=false; }
+  else { r.innerHTML=`比欠的多收了 <b class="over num">¥${fmt(-remain)}</b>，会记成「多付」`; wipeRow.hidden=true; $('#wipe-check').checked=false; }
+}
+$('#settle-amt-input').addEventListener('input', e=>{ sanitizeAmt(e.target); renderSettle(); });
+$('#wipe-check').addEventListener('change', renderSettle);
+$('#settle-save').addEventListener('click', ()=>{
+  const bal = balOf(detailCid); const n = parseFloat($('#settle-amt-input').value);
+  if(!n){ toast('还没输收了多少钱'); return; }
+  const c = custOf(detailCid);
+  const remain = Math.round((bal-n)*100)/100;
+  const made = [addEntry(detailCid,'payment','',n,TODAY)];
+  let msg = `收了 ${c.name} ¥${fmt(n)}`;
+  if(remain>0 && $('#wipe-check').checked){ made.push(addEntry(detailCid,'discount','',remain,TODAY)); msg += `，抹零 ¥${fmt(remain)}，已结清`; }
+  else if(remain>0) msg += `，还欠 ¥${fmt(remain)}`;
+  else if(remain===0) msg += '，已结清';
+  else msg += `，多付 ¥${fmt(-remain)}`;
+  closeLayer('sheet-settle');
+  renderDetail(); renderCust(); renderToday();
+  toast(msg, ()=>{
+    made.forEach(e=> entries.splice(entries.indexOf(e),1));
+    renderDetail(); renderCust(); renderToday();
+    toast('已撤销这次收款');
+  });
+});
+
+/* ═══════════ 账单 ═══════════ */
+function renderBill(){
+  const c = custOf(detailCid); const bal = balOf(c.id);
+  const list = entries.filter(e=>!e.deleted && e.cid===c.id).sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:a.id-b.id));
+  const now = new Date();
+  $('#bill-body').innerHTML = `
+  <div class="bill-card">
+    <div class="bill-head">欠款对账单</div>
+    <div class="bill-who">${c.name}${c.note?`（${c.note}）`:''}</div>
+    <div class="bill-upto num">截至 ${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日</div>
+    <div class="bill-sep"></div>
+    <div class="bill-total-label">${bal>0?'现在共欠':bal<0?'多付了':''}</div>
+    <div class="bill-total num ${bal>0?'owe':bal<0?'over':'zero'}">${bal===0?'已结清 ✓':'¥ '+fmt(Math.abs(bal))}</div>
+    <div class="bill-sep"></div>
+    <table class="bill-table num">
+      ${list.map(e=>{
+        const [,full] = KINDS[e.kind];
+        const pos = e.kind==='debt'||e.kind==='initial';
+        const [,m,d] = e.date.split('-');
+        return `<tr><td>${+m}/${+d}</td><td>${e.kind==='debt'? e.business : full}</td><td class="${pos?'r-owe':'r-pay'}">${pos?'+':'−'}${fmt(e.amount)}</td></tr>`;
+      }).join('')}
+    </table>
+    <div class="bill-sep"></div>
+    <div class="bill-foot">本单由记账本生成 · 如有疑问请当面对账<br>生成于 ${now.getMonth()+1}月${now.getDate()}日 ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}</div>
+  </div>`;
+}
+$('#bill-send').addEventListener('click', ()=>{
+  toast('正式版会把这张单子存成长图，打开微信让你选发给谁');
+});
+
+/* ═══════════ 我的 ═══════════ */
+$('#btn-send-backup').addEventListener('click', ()=>{
+  const n1 = customers.filter(c=>!c.deleted).length, n2 = entries.filter(e=>!e.deleted).length;
+  confirmBox('发送备份', `会把账本打包成一个备份文件（${n1} 位客户、${n2} 笔账），用微信发给家里人保管。<br><span style="color:var(--muted);font-size:.9rem">正式版这里会打开微信的发送界面。</span>`, '去发送', ()=> toast('已打包 · 正式版会跳到微信发送'));
+});
+$('#btn-restore').addEventListener('click', ()=>{
+  confirmBox('从备份恢复', `换新手机时：装好本 App，在微信里点开家人保管的备份文件，选「用记账本打开」就自动恢复。<br><span style="color:var(--muted);font-size:.9rem">恢复前会先把现在的账自动备份一份，不怕点错。</span>`, '知道了', ()=>{});
+});
+$('#btn-setup').addEventListener('click', ()=>{ openLayer('panel-setup'); $('#su-name').focus(); });
+$('#su-save').addEventListener('click', ()=>{
+  const name=$('#su-name').value.trim(); if(!name){ toast('名字还没写'); return; }
+  const amt=parseFloat($('#su-amt').value)||0;
+  const c=addCust(name, $('#su-note').value.trim(), '', name);
+  if(amt>0) addEntry(c.id,'initial','',amt,TODAY);
+  setupCount++; $('#setup-count').textContent=setupCount; $('#setup-n').textContent=setupCount;
+  $('#su-name').value=''; $('#su-note').value=''; $('#su-amt').value='';
+  toast(`录好了：${name}${amt>0?' 欠 ¥'+fmt(amt):''} · 下一位`);
+  $('#su-name').focus(); renderCust();
+});
+$('#btn-bizset').addEventListener('click', ()=>{
+  bizMode='manage'; $('#biz-title').textContent='业务字典';
+  $('#biz-search').value=''; renderBizPanel(''); openLayer('panel-biz');
+});
+$('#fontseg').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#fontseg button').forEach(x=>x.classList.toggle('active', x===b));
+  document.documentElement.dataset.scale = b.dataset.s==='std' ? '' : b.dataset.s;
+  toast('字体已调整，每一页都会变大');
+});
+$('#btn-trash').addEventListener('click', ()=>{ renderTrash(); openLayer('panel-trash'); });
+function renderTrash(){
+  const box=$('#trash-list'); box.innerHTML='';
+  const del = entries.filter(e=>e.deleted);
+  const card=document.createElement('div'); card.className='card'; card.style.marginTop='.5rem';
+  if(!del.length){ card.innerHTML='<div class="empty-hint">回收站是空的</div>'; }
+  del.forEach(e=>{
+    const c=custOf(e.cid);
+    const r=document.createElement('div'); r.className='row';
+    r.innerHTML=`<span class="stamp ${e.kind}">${KINDS[e.kind][0]}</span>
+      <div class="grow"><div class="entry-main">${c.name} · ${e.kind==='debt'?e.business:KINDS[e.kind][1]}</div>
+      <div class="entry-sub num">${dateCN(e.date)} · ¥${fmt(e.amount)}</div></div>`;
+    const btn=document.createElement('button'); btn.className='btn btn-ghost'; btn.style.cssText='min-height:2.3rem;font-size:.9rem;padding:0 .8rem'; btn.textContent='找回';
+    btn.addEventListener('click', ()=>{ e.deleted=false; toast(`找回了 ${c.name} 的 ¥${fmt(e.amount)}`); renderTrash(); renderToday(); renderCust(); });
+    r.appendChild(btn); card.appendChild(r);
+  });
+  box.appendChild(card);
+}
+
+/* ═══════════ 初始渲染 ═══════════ */
+function boot(){
+  renderBizGrid(); renderToday(); renderCust();
+  const n1=customers.filter(c=>!c.deleted).length, n2=entries.filter(e=>!e.deleted).length;
+  $('#about-line').textContent = `原型 v1.5 · ${n1} 位客户 · ${n2} 笔账 · 纯本地存储`;
+  const now=new Date(); $('#backup-time').textContent = `上次备份：今天 ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} · 只含账目数据，照片另存`;
+}
+boot();
+</script>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <files-path
+        name="private_exports"
+        path="exports/" />
+    <files-path
+        name="private_backups"
+        path="backups/" />
+    <cache-path
+        name="temporary_exports"
+        path="exports/" />
+    <external-path
+        name="public_backups"
+        path="Download/记账备份/" />
+</paths>
