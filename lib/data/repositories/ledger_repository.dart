@@ -843,6 +843,14 @@ final class LedgerRepository {
 
   Future<void> _ensureBusinessExists(String name) async {
     if ((await findActiveBusinessesWithExactName(name)).isNotEmpty) return;
+    final deleted =
+        await (db.select(db.businesses)
+              ..where(
+                (row) => row.name.equals(name) & row.deletedAt.isNotNull(),
+              )
+              ..limit(1))
+            .get();
+    if (deleted.isNotEmpty) return;
     await addBusiness(name);
   }
 
