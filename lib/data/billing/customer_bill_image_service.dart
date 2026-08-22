@@ -138,6 +138,7 @@ final class CustomerBillImageService {
     required CustomerRow customer,
     Iterable<LedgerEntryRow>? effectiveEntries,
     String? shopName,
+    bool showNotes = true,
   }) async {
     final generatedAt = _clock().toLocal();
     final sourceEntries =
@@ -150,7 +151,10 @@ final class CustomerBillImageService {
       generatedAt: generatedAt,
     );
 
-    final renderer = _CustomerBillCanvasRenderer(statement);
+    final renderer = _CustomerBillCanvasRenderer(
+      statement,
+      showNotes: showNotes,
+    );
     final rendered = await renderer.render();
     final directory = await _outputDirectoryProvider();
     await directory.create(recursive: true);
@@ -237,7 +241,7 @@ final class _RenderedBill {
 }
 
 final class _CustomerBillCanvasRenderer {
-  const _CustomerBillCanvasRenderer(this.statement);
+  const _CustomerBillCanvasRenderer(this.statement, {required this.showNotes});
 
   // 750 * 24000 * 4 约 69 MiB 原始像素。先测量再分配，避免极端
   // 历史流水导致进程被 OOM 杀掉；绝不会为压高度而静默丢明细。
@@ -266,6 +270,7 @@ final class _CustomerBillCanvasRenderer {
   ];
 
   final CustomerBillStatement statement;
+  final bool showNotes;
 
   Future<_RenderedBill> render() async {
     final requiredHeight = _layout(null).ceil();
@@ -474,12 +479,17 @@ final class _CustomerBillCanvasRenderer {
       final business = entry.business.trim().isEmpty
           ? '—'
           : entry.business.trim();
+      final note = showNotes ? entry.note.trim() : '';
       final businessHeight = _measureText(
         business,
         width: 224,
         style: _style(24, _ink),
       );
-      final rowHeight = businessHeight < 34 ? 58.0 : businessHeight + 24;
+      final noteHeight = note.isEmpty
+          ? 0.0
+          : _measureText(note, width: 224, style: _style(20, _muted));
+      final textHeight = businessHeight + (note.isEmpty ? 0 : 4 + noteHeight);
+      final rowHeight = textHeight < 34 ? 58.0 : textHeight + 24;
       final positive = entry.kind == 'initial' || entry.kind == 'debt';
       final amount =
           '${positive ? '+' : '−'}'
@@ -500,6 +510,16 @@ final class _CustomerBillCanvasRenderer {
           _ => _ink,
         },
       );
+      if (note.isNotEmpty) {
+        _text(
+          canvas,
+          note,
+          x: _left + 240,
+          y: y + 12 + businessHeight + 4,
+          width: 224,
+          style: _style(20, _muted),
+        );
+      }
       y += rowHeight;
       if (canvas != null) {
         canvas.drawLine(

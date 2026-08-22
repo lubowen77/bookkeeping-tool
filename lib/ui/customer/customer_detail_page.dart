@@ -299,19 +299,29 @@ class _CustomerDetailPageState extends State<CustomerDetailPage> {
     );
     try {
       final shopName = await controller.repository.getSetting('shop_name');
-      final result = await CustomerBillImageService(controller.repository.db)
-          .generate(
-            customer: customer,
-            effectiveEntries: entries,
-            shopName: shopName,
-          );
+      final showNotes = CustomerBillPreviewPage.showNotesFromSetting(
+        await controller.repository.getSetting('bill_show_note'),
+      );
+      final service = CustomerBillImageService(controller.repository.db);
+      final result = await service.generate(
+        customer: customer,
+        effectiveEntries: entries,
+        shopName: shopName,
+        showNotes: showNotes,
+      );
       if (!mounted) return;
       Navigator.pop(context);
       await Navigator.push<void>(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              _BillPreviewPage(result: result, customerName: customer.name),
+          builder: (_) => CustomerBillPreviewPage(
+            service: service,
+            customer: customer,
+            effectiveEntries: List.unmodifiable(entries),
+            shopName: shopName,
+            initialResult: result,
+            initialShowNotes: showNotes,
+          ),
         ),
       );
     } catch (error) {
@@ -666,24 +676,96 @@ final class _DetailEntryRow extends StatelessWidget {
   }
 }
 
-final class _BillPreviewPage extends StatelessWidget {
-  const _BillPreviewPage({required this.result, required this.customerName});
+final class CustomerBillPreviewPage extends StatefulWidget {
+  const CustomerBillPreviewPage({
+    super.key,
+    required this.service,
+    required this.customer,
+    required this.effectiveEntries,
+    required this.shopName,
+    required this.initialResult,
+    required this.initialShowNotes,
+    this.regenerator,
+  });
 
-  final CustomerBillImageResult result;
-  final String customerName;
+  final CustomerBillImageService service;
+  final CustomerRow customer;
+  final List<LedgerEntryRow> effectiveEntries;
+  final String? shopName;
+  final CustomerBillImageResult initialResult;
+  final bool initialShowNotes;
+  final Future<CustomerBillImageResult> Function(bool showNotes)? regenerator;
 
-  Future<void> _share(BuildContext context) async {
+  static bool showNotesFromSetting(String? value) => value != '0';
+
+  @override
+  State<CustomerBillPreviewPage> createState() =>
+      _CustomerBillPreviewPageState();
+}
+
+final class _CustomerBillPreviewPageState
+    extends State<CustomerBillPreviewPage> {
+  late CustomerBillImageResult _result;
+  late bool _showNotes;
+  var _generating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _result = widget.initialResult;
+    _showNotes = widget.initialShowNotes;
+  }
+
+  Future<void> _setShowNotes(bool value) async {
+    if (_generating || value == _showNotes) return;
+    final previous = _showNotes;
+    final repository = context.read<AppController>().repository;
+    setState(() {
+      _showNotes = value;
+      _generating = true;
+    });
+    try {
+      await repository.setSetting('bill_show_note', value ? '1' : '0');
+      final result =
+          await (widget.regenerator?.call(value) ??
+              widget.service.generate(
+                customer: widget.customer,
+                effectiveEntries: widget.effectiveEntries,
+                shopName: widget.shopName,
+                showNotes: value,
+              ));
+      if (!mounted) return;
+      setState(() {
+        _result = result;
+        _generating = false;
+      });
+    } catch (error) {
+      try {
+        await repository.setSetting('bill_show_note', previous ? '1' : '0');
+      } catch (_) {
+        // 保持原图可分享，错误信息仍以第一次失败为准。
+      }
+      if (!mounted) return;
+      setState(() {
+        _showNotes = previous;
+        _generating = false;
+      });
+      showLedgerSnack(context, '账单备注设置没更新：$error');
+    }
+  }
+
+  Future<void> _share() async {
     try {
       final controller = context.read<AppController>();
       await controller.backup.shareFile(
-        result.file,
+        _result.file,
         mimeType: 'image/png',
-        title: '发「$customerName」的欠款账单',
-        text: '「$customerName」的欠款对账单，如有疑问请当面对账。',
+        title: '发「${widget.customer.name}」的欠款账单',
+        text: '「${widget.customer.name}」的欠款对账单，如有疑问请当面对账。',
       );
-      if (context.mounted) showLedgerSnack(context, '请选择微信联系人发送');
+      if (mounted) showLedgerSnack(context, '请选择微信联系人发送');
     } catch (error) {
-      if (context.mounted) showLedgerSnack(context, '账单没发出：$error');
+      if (mounted) showLedgerSnack(context, '账单没发出：$error');
     }
   }
 
@@ -703,11 +785,32 @@ final class _BillPreviewPage extends StatelessWidget {
       ),
       body: Column(
         children: [
+          CheckboxListTile(
+            key: const Key('bill-show-note-option'),
+            value: _showNotes,
+            onChanged: _generating
+                ? null
+                : (value) {
+                    if (value != null) unawaited(_setShowNotes(value));
+                  },
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+            dense: true,
+            title: Text(
+              '账单上显示备注（会记住这次的选择）',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+            ),
+          ),
+          if (_generating)
+            const LinearProgressIndicator(key: Key('bill-regenerating')),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(14),
               child: Image.file(
-                result.file,
+                _result.file,
+                key: ValueKey(_result.file.path),
                 fit: BoxFit.fitWidth,
                 errorBuilder: (_, _, _) => const EmptyHint('账单图片已不在'),
               ),
@@ -721,7 +824,7 @@ final class _BillPreviewPage extends StatelessWidget {
               style: FilledButton.styleFrom(
                 minimumSize: const Size(double.infinity, 58),
               ),
-              onPressed: () => _share(context),
+              onPressed: _generating ? null : _share,
               icon: const Icon(Icons.share_outlined),
               label: const Text('存成图片，发微信给他'),
             ),

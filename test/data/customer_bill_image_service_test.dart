@@ -178,4 +178,56 @@ void main() {
     expect(result.file.path, endsWith('.png'));
     expect(await result.file.length(), greaterThan(1000));
   });
+
+  test('账单备注开关同时控制文字与明细行高', () async {
+    final output = await Directory.systemTemp.createTemp(
+      'zhangben-bill-note-test-',
+    );
+    addTearDown(() => output.delete(recursive: true));
+
+    final customer = await repository.addCustomer(name: '张老三');
+    final entry = await repository.addEntry(
+      customerId: customer.id,
+      kind: EntryKind.debt,
+      business: '送货',
+      amountCents: 35000,
+      bizDate: '2026-08-08',
+      note: '纸箱 20 个',
+    );
+    final service = CustomerBillImageService(
+      db,
+      clock: () => now,
+      outputDirectoryProvider: () async => output,
+    );
+
+    final withNote = await service.generate(
+      customer: customer,
+      showNotes: true,
+    );
+    final withoutNote = await service.generate(
+      customer: customer,
+      showNotes: false,
+    );
+    await repository.updateEntry(
+      entryId: entry.id,
+      customerId: customer.id,
+      kind: EntryKind.debt,
+      business: '送货',
+      amountCents: 35000,
+      bizDate: '2026-08-08',
+      note: '',
+    );
+    final emptyNote = await service.generate(
+      customer: customer,
+      showNotes: true,
+    );
+
+    expect(withNote.height, greaterThan(withoutNote.height));
+    expect(emptyNote.height, withoutNote.height);
+    expect(
+      await withoutNote.file.readAsBytes(),
+      orderedEquals(await emptyNote.file.readAsBytes()),
+      reason: '关闭备注后输出应与源流水没有备注时完全一致',
+    );
+  });
 }
