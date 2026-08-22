@@ -23,6 +23,88 @@ void showLedgerSnack(
     );
 }
 
+final class DoneBar extends StatelessWidget {
+  const DoneBar({
+    super.key,
+    required this.leadingText,
+    required this.emphasizedText,
+    required this.onUndo,
+    this.trailingText = '',
+    this.note = '',
+  });
+
+  final String leadingText;
+  final String emphasizedText;
+  final String trailingText;
+  final String note;
+  final VoidCallback onUndo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: AppColors.greenBackground,
+        border: Border.all(color: AppColors.green, width: 1.5),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    style: const TextStyle(
+                      fontSize: 18,
+                      height: 1.4,
+                      color: AppColors.greenInk,
+                    ),
+                    children: [
+                      TextSpan(text: leadingText),
+                      TextSpan(
+                        text: emphasizedText,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      TextSpan(text: trailingText),
+                    ],
+                  ),
+                ),
+                if (note.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    note,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      height: 1.35,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              backgroundColor: AppColors.card,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: onUndo,
+            child: const Text('撤回'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 final class PageHeader extends StatelessWidget {
   const PageHeader({super.key, required this.title, this.subtitle});
 

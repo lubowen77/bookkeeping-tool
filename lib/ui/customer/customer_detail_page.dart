@@ -25,6 +25,13 @@ final class CustomerDetailPage extends StatefulWidget {
 }
 
 class _CustomerDetailPageState extends State<CustomerDetailPage> {
+  _SettlementDone? _done;
+
+  void _dismissDoneBar() {
+    if (_done == null) return;
+    setState(() => _done = null);
+  }
+
   Future<_CustomerDetailData> _load() async {
     final repository = context.read<AppController>().repository;
     final customer = await repository.getCustomer(widget.customerId);
@@ -182,31 +189,33 @@ class _CustomerDetailPageState extends State<CustomerDetailPage> {
     if (result == null || !mounted) return;
     context.read<AppController>().dataChanged();
     final payment = Money.formatCents(result.paymentCents);
-    if (result.isSettled) {
-      showLedgerSnack(
-        context,
-        '「${customer.name}」这次已结清',
-        duration: const Duration(seconds: 5),
-        actionLabel: '撤销',
-        onAction: () => unawaited(_undoSettlement(customer, result)),
-      );
-    } else if (result.isOverpaid) {
-      showLedgerSnack(
-        context,
-        '已收「${customer.name}」¥$payment；现在多付 ¥${Money.formatCents(-result.balanceAfterCents)}',
-        duration: const Duration(seconds: 5),
-        actionLabel: '撤销',
-        onAction: () => unawaited(_undoSettlement(customer, result)),
-      );
-    } else {
-      showLedgerSnack(
-        context,
-        '已收「${customer.name}」¥$payment；还欠 ¥${Money.formatCents(result.balanceAfterCents)}',
-        duration: const Duration(seconds: 5),
-        actionLabel: '撤销',
-        onAction: () => unawaited(_undoSettlement(customer, result)),
-      );
-    }
+    final trailingText = result.discountEntryId != null
+        ? '，抹零 ¥${Money.formatCents(result.balanceBeforeCents - result.paymentCents)}，已结清'
+        : result.isSettled
+        ? '，已结清'
+        : result.isOverpaid
+        ? '，多付 ¥${Money.formatCents(-result.balanceAfterCents)}'
+        : '，还欠 ¥${Money.formatCents(result.balanceAfterCents)}';
+    setState(
+      () => _done = _SettlementDone(
+        customer: customer,
+        result: result,
+        emphasizedText: '¥$payment',
+        trailingText: trailingText,
+      ),
+    );
+  }
+
+  Future<void> _startSettlement(CustomerRow customer, int balanceCents) async {
+    _dismissDoneBar();
+    await _settle(customer, balanceCents);
+  }
+
+  void _undoDone() {
+    final done = _done;
+    if (done == null) return;
+    setState(() => _done = null);
+    unawaited(_undoSettlement(done.customer, done.result));
   }
 
   Future<void> _undoSettlement(
@@ -220,7 +229,7 @@ class _CustomerDetailPageState extends State<CustomerDetailPage> {
     ]);
     if (!mounted) return;
     controller.dataChanged();
-    showLedgerSnack(context, '已撤销这次收款');
+    showLedgerSnack(context, '已撤回这次收款');
     await _settle(
       customer,
       result.balanceBeforeCents,
@@ -343,12 +352,19 @@ class _CustomerDetailPageState extends State<CustomerDetailPage> {
               if (index == 0) {
                 return _DetailHeader(
                   data: data,
-                  onSettle: () => _settle(data.customer, data.balanceCents),
+                  done: _done,
+                  onUndo: _undoDone,
+                  onSettle: () =>
+                      _startSettlement(data.customer, data.balanceCents),
                   onDebt: () {
+                    _dismissDoneBar();
                     controller.prepareDebtFor(data.customer);
                     Navigator.popUntil(context, (route) => route.isFirst);
                   },
-                  onBill: () => _sendBill(data.customer, data.entries),
+                  onBill: () {
+                    _dismissDoneBar();
+                    unawaited(_sendBill(data.customer, data.entries));
+                  },
                   onEdit: () => _editCustomer(data.customer),
                   onDelete: () =>
                       _deleteCustomer(data.customer, data.balanceCents),
@@ -367,6 +383,20 @@ class _CustomerDetailPageState extends State<CustomerDetailPage> {
   }
 }
 
+final class _SettlementDone {
+  const _SettlementDone({
+    required this.customer,
+    required this.result,
+    required this.emphasizedText,
+    required this.trailingText,
+  });
+
+  final CustomerRow customer;
+  final SettlementResult result;
+  final String emphasizedText;
+  final String trailingText;
+}
+
 final class _CustomerDetailData {
   const _CustomerDetailData(this.customer, this.balanceCents, this.entries);
 
@@ -380,6 +410,8 @@ enum _CustomerMenu { edit, delete }
 final class _DetailHeader extends StatelessWidget {
   const _DetailHeader({
     required this.data,
+    required this.done,
+    required this.onUndo,
     required this.onSettle,
     required this.onDebt,
     required this.onBill,
@@ -388,6 +420,8 @@ final class _DetailHeader extends StatelessWidget {
   });
 
   final _CustomerDetailData data;
+  final _SettlementDone? done;
+  final VoidCallback onUndo;
   final VoidCallback onSettle;
   final VoidCallback onDebt;
   final VoidCallback onBill;
@@ -532,6 +566,15 @@ final class _DetailHeader extends StatelessWidget {
             ],
           ),
         ),
+        if (done case final done?)
+          DoneBar(
+            key: const Key('settlement-done-bar'),
+            leadingText: '收了 ${done.customer.name} ',
+            emphasizedText: done.emphasizedText,
+            trailingText: done.trailingText,
+            note: done.result.paymentNote,
+            onUndo: onUndo,
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
           child: OutlinedButton.icon(

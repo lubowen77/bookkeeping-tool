@@ -27,6 +27,10 @@ class _RecordPageState extends State<RecordPage> {
   String? _business;
   final _amount = TextEditingController();
   final _note = TextEditingController();
+  final _scroll = ScrollController();
+  final _doneBarKey = GlobalKey();
+  AppController? _controller;
+  _RecordDone? _done;
   bool _saving = false;
 
   @override
@@ -37,10 +41,58 @@ class _RecordPageState extends State<RecordPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = context.read<AppController>();
+    if (!identical(_controller, controller)) {
+      _controller?.removeListener(_handleControllerChange);
+      _controller = controller..addListener(_handleControllerChange);
+    }
+  }
+
+  @override
   void dispose() {
+    _controller?.removeListener(_handleControllerChange);
+    _scroll.dispose();
     _amount.dispose();
     _note.dispose();
     super.dispose();
+  }
+
+  void _handleControllerChange() {
+    if (_controller?.tabIndex != 0) _dismissDoneBar();
+  }
+
+  void _dismissDoneBar() {
+    if (!mounted || _done == null) return;
+    setState(() => _done = null);
+  }
+
+  void _showDoneBar(_RecordDone done) {
+    setState(() => _done = done);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final doneContext = _doneBarKey.currentContext;
+      if (!mounted || _done != done || doneContext == null) return;
+      unawaited(_ensureDoneBarVisible(done, doneContext));
+    });
+  }
+
+  Future<void> _ensureDoneBarVisible(
+    _RecordDone done,
+    BuildContext doneContext,
+  ) async {
+    await Scrollable.ensureVisible(
+      doneContext,
+      alignment: 1,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+    if (!mounted || _done != done || !_scroll.hasClients) return;
+    await _scroll.animateTo(
+      _scroll.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOut,
+    );
   }
 
   DateTime get _today {
@@ -74,6 +126,7 @@ class _RecordPageState extends State<RecordPage> {
   }
 
   Future<void> _pickCustomer() async {
+    _dismissDoneBar();
     final customer = await Navigator.push<CustomerRow>(
       context,
       MaterialPageRoute(builder: (_) => const CustomerPickerPage()),
@@ -84,6 +137,7 @@ class _RecordPageState extends State<RecordPage> {
   }
 
   Future<void> _chooseOtherBusiness() async {
+    _dismissDoneBar();
     final result = await Navigator.push<BusinessRow>(
       context,
       MaterialPageRoute(builder: (_) => const BusinessPickerPage()),
@@ -92,6 +146,7 @@ class _RecordPageState extends State<RecordPage> {
   }
 
   Future<void> _pickDate() async {
+    _dismissDoneBar();
     final value = await showDatePicker(
       context: context,
       initialDate: _date,
@@ -106,6 +161,7 @@ class _RecordPageState extends State<RecordPage> {
   }
 
   Future<void> _save() async {
+    _dismissDoneBar();
     final controller = context.read<AppController>();
     final customer = controller.recordCustomer;
     if (customer == null) {
@@ -147,20 +203,14 @@ class _RecordPageState extends State<RecordPage> {
       final dateSuffix = _isSameDay(_date, _today)
           ? ''
           : '（${_dateText(_date)}）';
-      showLedgerSnack(
-        context,
-        '已记上：${activeCustomer.name} $_business ¥${Money.formatCents(cents)}$dateSuffix',
-        duration: const Duration(seconds: 5),
-        actionLabel: '撤销',
-        onAction: () => unawaited(
-          _undoEntry(
-            entry.id,
-            customer: draftCustomer,
-            business: draftBusiness,
-            amount: draftAmount,
-            note: draftNote,
-          ),
-        ),
+      final done = _RecordDone(
+        entryId: entry.id,
+        customer: draftCustomer,
+        business: draftBusiness,
+        amount: draftAmount,
+        amountCents: cents,
+        note: draftNote,
+        dateSuffix: dateSuffix,
       );
       controller.setRecordCustomer(null);
       controller.dataChanged();
@@ -168,6 +218,7 @@ class _RecordPageState extends State<RecordPage> {
         _amount.clear();
         _note.clear();
       });
+      _showDoneBar(done);
     } on StateError {
       controller.setRecordCustomer(null);
       if (mounted) showLedgerSnack(context, '客户已变动，请重新选一次');
@@ -178,26 +229,27 @@ class _RecordPageState extends State<RecordPage> {
     }
   }
 
-  Future<void> _undoEntry(
-    int entryId, {
-    required CustomerRow customer,
-    required String business,
-    required String amount,
-    required String note,
-  }) async {
+  void _undoDone() {
+    final done = _done;
+    if (done == null) return;
+    setState(() => _done = null);
+    unawaited(_undoEntry(done));
+  }
+
+  Future<void> _undoEntry(_RecordDone done) async {
     final controller = context.read<AppController>();
-    await controller.repository.softDeleteEntries([entryId]);
+    await controller.repository.softDeleteEntries([done.entryId]);
     if (!mounted) return;
-    controller.setRecordCustomer(customer);
+    controller.setRecordCustomer(done.customer);
     controller.dataChanged();
     setState(() {
-      _business = business;
-      _amount.text = amount;
-      _amount.selection = TextSelection.collapsed(offset: amount.length);
-      _note.text = note;
-      _note.selection = TextSelection.collapsed(offset: note.length);
+      _business = done.business;
+      _amount.text = done.amount;
+      _amount.selection = TextSelection.collapsed(offset: done.amount.length);
+      _note.text = done.note;
+      _note.selection = TextSelection.collapsed(offset: done.note.length);
     });
-    showLedgerSnack(context, '已撤销，这笔没记');
+    showLedgerSnack(context, '已撤回，这笔没记');
   }
 
   @override
@@ -207,247 +259,304 @@ class _RecordPageState extends State<RecordPage> {
     final now = DateTime.now();
     return ColoredBox(
       color: AppColors.paper,
-      child: ListView(
-        key: const Key('record-page'),
-        padding: const EdgeInsets.only(bottom: 14),
-        children: [
-          PageHeader(title: '记一笔', subtitle: '${now.month}月${now.day}日'),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('今天'),
-                  selected: _isSameDay(_date, _today),
-                  onSelected: (_) => setState(() => _date = _today),
-                ),
-                ChoiceChip(
-                  label: const Text('昨天'),
-                  selected: _isSameDay(
-                    _date,
-                    _today.subtract(const Duration(days: 1)),
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _dismissDoneBar,
+        child: ListView(
+          controller: _scroll,
+          key: const Key('record-page'),
+          padding: const EdgeInsets.only(bottom: 14),
+          children: [
+            PageHeader(title: '记一笔', subtitle: '${now.month}月${now.day}日'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('今天'),
+                    selected: _isSameDay(_date, _today),
+                    onSelected: (_) => setState(() {
+                      _done = null;
+                      _date = _today;
+                    }),
                   ),
-                  onSelected: (_) => setState(
-                    () => _date = _today.subtract(const Duration(days: 1)),
+                  ChoiceChip(
+                    label: const Text('昨天'),
+                    selected: _isSameDay(
+                      _date,
+                      _today.subtract(const Duration(days: 1)),
+                    ),
+                    onSelected: (_) => setState(() {
+                      _done = null;
+                      _date = _today.subtract(const Duration(days: 1));
+                    }),
                   ),
-                ),
-                ChoiceChip(
-                  label: Text(
-                    _isSameDay(_date, _today) ||
-                            _isSameDay(
-                              _date,
-                              _today.subtract(const Duration(days: 1)),
-                            )
-                        ? '选日子'
-                        : _dateText(_date),
+                  ChoiceChip(
+                    label: Text(
+                      _isSameDay(_date, _today) ||
+                              _isSameDay(
+                                _date,
+                                _today.subtract(const Duration(days: 1)),
+                              )
+                          ? '选日子'
+                          : _dateText(_date),
+                    ),
+                    selected:
+                        !_isSameDay(_date, _today) &&
+                        !_isSameDay(
+                          _date,
+                          _today.subtract(const Duration(days: 1)),
+                        ),
+                    onSelected: (_) => _pickDate(),
                   ),
-                  selected:
-                      !_isSameDay(_date, _today) &&
-                      !_isSameDay(
-                        _date,
-                        _today.subtract(const Duration(days: 1)),
-                      ),
-                  onSelected: (_) => _pickDate(),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          LedgerCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const FieldLabel('谁的账'),
-                InkWell(
-                  key: const Key('pick-customer'),
-                  onTap: _pickCustomer,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 58),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 10, 12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              customer == null
-                                  ? '点这里选客户'
-                                  : '${customer.name}${customer.note.isEmpty ? '' : '（${customer.note}）'}',
-                              style: TextStyle(
-                                fontSize: 21,
-                                fontWeight: customer == null
-                                    ? FontWeight.w500
-                                    : FontWeight.w600,
-                                color: customer == null
-                                    ? AppColors.disabled
-                                    : AppColors.ink,
+            LedgerCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const FieldLabel('谁的账'),
+                  InkWell(
+                    key: const Key('pick-customer'),
+                    onTap: _pickCustomer,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 58),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 10, 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                customer == null
+                                    ? '点这里选客户'
+                                    : '${customer.name}${customer.note.isEmpty ? '' : '（${customer.note}）'}',
+                                style: TextStyle(
+                                  fontSize: 21,
+                                  fontWeight: customer == null
+                                      ? FontWeight.w500
+                                      : FontWeight.w600,
+                                  color: customer == null
+                                      ? AppColors.disabled
+                                      : AppColors.ink,
+                                ),
                               ),
                             ),
-                          ),
-                          const Icon(
-                            Icons.chevron_right,
-                            color: AppColors.disabled,
-                          ),
-                          const Text(
-                            '选择',
-                            style: TextStyle(color: AppColors.muted),
-                          ),
-                        ],
+                            const Icon(
+                              Icons.chevron_right,
+                              color: AppColors.disabled,
+                            ),
+                            const Text(
+                              '选择',
+                              style: TextStyle(color: AppColors.muted),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          LedgerCard(
-            child: FutureBuilder<({List<BusinessRow> top, bool selectedAlive})>(
-              key: ValueKey('quick-businesses-${controller.revision}'),
-              future: _loadQuickBusinesses(controller),
-              builder: (context, snapshot) {
-                final businesses = snapshot.data?.top ?? const <BusinessRow>[];
-                final selectedAlive = snapshot.data?.selectedAlive ?? true;
-                final selected = _business;
-                if (selected != null && snapshot.hasData && !selectedAlive) {
-                  // 字典里已删掉的业务不能留在选中态（§3.7 删除边界）
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted && _business == selected) {
-                      setState(() => _business = null);
-                    }
-                  });
-                }
-                final inTop = businesses.any((item) => item.name == selected);
-                final showPickedLabel =
-                    selected != null && selectedAlive && !inTop;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: Row(
+            LedgerCard(
+              child:
+                  FutureBuilder<({List<BusinessRow> top, bool selectedAlive})>(
+                    key: ValueKey('quick-businesses-${controller.revision}'),
+                    future: _loadQuickBusinesses(controller),
+                    builder: (context, snapshot) {
+                      final businesses =
+                          snapshot.data?.top ?? const <BusinessRow>[];
+                      final selectedAlive =
+                          snapshot.data?.selectedAlive ?? true;
+                      final selected = _business;
+                      if (selected != null &&
+                          snapshot.hasData &&
+                          !selectedAlive) {
+                        // 字典里已删掉的业务不能留在选中态（§3.7 删除边界）
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted && _business == selected) {
+                            setState(() => _business = null);
+                          }
+                        });
+                      }
+                      final inTop = businesses.any(
+                        (item) => item.name == selected,
+                      );
+                      final showPickedLabel =
+                          selected != null && selectedAlive && !inTop;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Expanded(
-                            child: Text(
-                              '什么业务',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: AppColors.muted,
-                                letterSpacing: 1,
-                              ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                            child: Row(
+                              children: [
+                                const Expanded(
+                                  child: Text(
+                                    '什么业务',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      color: AppColors.muted,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                ),
+                                if (showPickedLabel)
+                                  _BusinessPickedLabel(
+                                    key: const Key('business-picked-label'),
+                                    business: selected,
+                                    onTap: _chooseOtherBusiness,
+                                  ),
+                              ],
                             ),
                           ),
-                          if (showPickedLabel)
-                            _BusinessPickedLabel(
-                              key: const Key('business-picked-label'),
-                              business: selected,
-                              onTap: _chooseOtherBusiness,
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 7, 14, 14),
+                            child: GridView.count(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisCount: 3,
+                              mainAxisSpacing: 8,
+                              crossAxisSpacing: 8,
+                              mainAxisExtent: 58,
+                              children: [
+                                for (final business in businesses)
+                                  _BusinessButton(
+                                    key: ValueKey(
+                                      'business-button-${business.name}',
+                                    ),
+                                    text: business.name,
+                                    selected: selected == business.name,
+                                    onTap: () => setState(() {
+                                      _done = null;
+                                      _business = business.name;
+                                    }),
+                                  ),
+                                _BusinessButton(
+                                  key: const Key('business-button-more'),
+                                  text: '更多…',
+                                  selected: false,
+                                  onTap: _chooseOtherBusiness,
+                                ),
+                              ],
                             ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 7, 14, 14),
-                      child: GridView.count(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: 3,
-                        mainAxisSpacing: 8,
-                        crossAxisSpacing: 8,
-                        mainAxisExtent: 58,
-                        children: [
-                          for (final business in businesses)
-                            _BusinessButton(
-                              key: ValueKey('business-button-${business.name}'),
-                              text: business.name,
-                              selected: selected == business.name,
-                              onTap: () =>
-                                  setState(() => _business = business.name),
-                            ),
-                          _BusinessButton(
-                            key: const Key('business-button-more'),
-                            text: '更多…',
-                            selected: false,
-                            onTap: _chooseOtherBusiness,
                           ),
                         ],
-                      ),
-                    ),
-                  ],
-                );
-              },
+                      );
+                    },
+                  ),
             ),
-          ),
-          LedgerCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const FieldLabel('多少钱'),
-                Padding(
-                  key: const Key('amount-display'),
-                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
-                  child: TextField(
-                    controller: _amount,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+            LedgerCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const FieldLabel('多少钱'),
+                  Padding(
+                    key: const Key('amount-display'),
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
+                    child: TextField(
+                      controller: _amount,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: const <TextInputFormatter>[
+                        MoneyInputFormatter(),
+                      ],
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 38,
+                        fontWeight: FontWeight.w700,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                      decoration: const InputDecoration(
+                        prefixText: '¥ ',
+                        hintText: '0',
+                        helperText: '点一下，用手机键盘输数字',
+                      ),
+                      textInputAction: TextInputAction.done,
+                      onTap: _dismissDoneBar,
+                      onChanged: (_) => _dismissDoneBar(),
+                      onSubmitted: (_) => _save(),
                     ),
-                    inputFormatters: const <TextInputFormatter>[
-                      MoneyInputFormatter(),
-                    ],
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      fontSize: 38,
-                      fontWeight: FontWeight.w700,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                    decoration: const InputDecoration(
-                      prefixText: '¥ ',
-                      hintText: '0',
-                      helperText: '点一下，用手机键盘输数字',
-                    ),
+                  ),
+                ],
+              ),
+            ),
+            LedgerCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const FieldLabel('备注（可不填，写具体是什么事）'),
+                  TextField(
+                    key: const Key('entry-note'),
+                    controller: _note,
+                    maxLength: 50,
+                    maxLines: 1,
                     textInputAction: TextInputAction.done,
+                    decoration: const InputDecoration(
+                      hintText: '比如：纸箱 20 个 / 切 3 米板',
+                      counterText: '',
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.fromLTRB(16, 7, 16, 14),
+                    ),
+                    onTap: _dismissDoneBar,
+                    onChanged: (_) => _dismissDoneBar(),
                     onSubmitted: (_) => _save(),
                   ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: FilledButton(
+                key: const Key('save-entry'),
+                onPressed: _saving ? null : _save,
+                child: Text(_saving ? '正在记…' : '记 上'),
+              ),
+            ),
+            if (_done case final done?)
+              KeyedSubtree(
+                key: _doneBarKey,
+                child: DoneBar(
+                  key: const Key('record-done-bar'),
+                  leadingText: '已记上：',
+                  emphasizedText:
+                      '${done.customer.name} ${done.business} ¥${Money.formatCents(done.amountCents)}',
+                  trailingText: done.dateSuffix,
+                  note: done.note,
+                  onUndo: _undoDone,
                 ),
-              ],
-            ),
-          ),
-          LedgerCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const FieldLabel('备注（可不填，写具体是什么事）'),
-                TextField(
-                  key: const Key('entry-note'),
-                  controller: _note,
-                  maxLength: 50,
-                  maxLines: 1,
-                  textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(
-                    hintText: '比如：纸箱 20 个 / 切 3 米板',
-                    counterText: '',
-                    filled: false,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    contentPadding: EdgeInsets.fromLTRB(16, 7, 16, 14),
-                  ),
-                  onSubmitted: (_) => _save(),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: FilledButton(
-              key: const Key('save-entry'),
-              onPressed: _saving ? null : _save,
-              child: Text(_saving ? '正在记…' : '记 上'),
-            ),
-          ),
-        ],
+              ),
+          ],
+        ),
       ),
     );
   }
+}
+
+final class _RecordDone {
+  const _RecordDone({
+    required this.entryId,
+    required this.customer,
+    required this.business,
+    required this.amount,
+    required this.amountCents,
+    required this.note,
+    required this.dateSuffix,
+  });
+
+  final int entryId;
+  final CustomerRow customer;
+  final String business;
+  final String amount;
+  final int amountCents;
+  final String note;
+  final String dateSuffix;
 }
 
 final class _BusinessPickedLabel extends StatelessWidget {

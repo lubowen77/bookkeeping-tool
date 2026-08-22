@@ -18,7 +18,7 @@ void main() {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     final repository = LedgerRepository(database);
     final active = await repository.addCustomer(name: '大字号客户', note: '东村开货车的');
-    await repository.addEntry(
+    final activeEntry = await repository.addEntry(
       customerId: active.id,
       kind: EntryKind.debt,
       business: '送货',
@@ -70,18 +70,43 @@ void main() {
     await expectNoLayoutError();
     await tester.tap(find.widgetWithText(TextButton, '先不选'));
     await expectNoLayoutError();
+    controller.setRecordCustomer(active);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('business-button-送货')));
+    final amountField = find.descendant(
+      of: find.byKey(const Key('amount-display')),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(amountField, '88');
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('entry-note')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.enterText(
+      find.byKey(const Key('entry-note')),
+      '纸箱 20 个，下午送到东村仓库',
+    );
     await tester.scrollUntilVisible(
       find.byKey(const Key('save-entry')),
       400,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.tap(find.byKey(const Key('save-entry')));
     await expectNoLayoutError();
+    final doneBar = find.byKey(const Key('record-done-bar'));
+    expect(doneBar, findsOneWidget);
+    expect(
+      tester.getBottomLeft(doneBar).dy,
+      lessThanOrEqualTo(tester.getTopLeft(find.byType(NavigationBar)).dy),
+      reason: '特大字号下撤回条也应自动完整滚入可见区',
+    );
 
     // 流水 + 编辑弹层。
     await tester.tap(find.byIcon(Icons.calendar_month_outlined));
     await expectNoLayoutError();
     expect(find.byKey(const Key('today-page')), findsOneWidget);
-    await tester.tap(find.text('大字号客户'));
+    await tester.tap(find.byKey(ValueKey('today-entry-${activeEntry.id}')));
     await expectNoLayoutError();
     expect(find.text('改这笔记账'), findsOneWidget);
     await tester.scrollUntilVisible(
