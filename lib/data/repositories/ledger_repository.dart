@@ -507,7 +507,6 @@ final class LedgerRepository {
         kind: EntryKind.initial,
         amountCents: currentDebtCents,
         bizDate: bizDate ?? businessDateOf(_clock()),
-        note: '期初建档',
       );
       return InitialCustomerResult(
         customer: customer,
@@ -521,6 +520,7 @@ final class LedgerRepository {
     required int paymentCents,
     required bool writeOffRemaining,
     String? bizDate,
+    String note = '',
   }) {
     if (paymentCents <= 0) {
       throw const FormatException('实收金额必须大于 0');
@@ -537,11 +537,13 @@ final class LedgerRepository {
       }
 
       final date = bizDate ?? businessDateOf(_clock());
+      final normalizedNote = note.trim();
       final payment = await addEntry(
         customerId: customerId,
         kind: EntryKind.payment,
         amountCents: paymentCents,
         bizDate: date,
+        note: normalizedNote,
       );
       int? discountEntryId;
       if (writeOffRemaining) {
@@ -558,6 +560,7 @@ final class LedgerRepository {
       return SettlementResult(
         paymentEntryId: payment.id,
         paymentCents: paymentCents,
+        paymentNote: normalizedNote,
         discountEntryId: discountEntryId,
         balanceBeforeCents: balanceBefore,
         balanceAfterCents: balanceAfter,

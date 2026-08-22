@@ -432,11 +432,8 @@ final class _EntryRow extends StatelessWidget {
     final entry = item.entry;
     final kind = EntryKind.fromStorage(entry.kind);
     final positive = kind.addsToBalance;
-    final created = DateTime.tryParse(entry.createdAt)?.toLocal();
-    final time = created == null
-        ? ''
-        : '${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
     return InkWell(
+      key: ValueKey('today-entry-${entry.id}'),
       onTap: onTap,
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 70),
@@ -458,7 +455,7 @@ final class _EntryRow extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${_kindBusiness(entry)}${time.isEmpty ? '' : ' · $time'}',
+                      '${_kindBusiness(entry)}${entry.note.isEmpty ? '' : ' · ${entry.note}'}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -551,6 +548,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
   late DateTime _date;
   late TextEditingController _amount;
   late TextEditingController _business;
+  late TextEditingController _note;
   bool _saving = false;
 
   LedgerEntryRow get _entry => widget.item.entry;
@@ -565,12 +563,14 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
       text: Money.formatCents(_entry.amountCents),
     );
     _business = TextEditingController(text: _entry.business);
+    _note = TextEditingController(text: _entry.note);
   }
 
   @override
   void dispose() {
     _amount.dispose();
     _business.dispose();
+    _note.dispose();
     super.dispose();
   }
 
@@ -617,7 +617,7 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
       amountCents: cents,
       bizDate: businessDateOf(_date),
       business: _business.text,
-      note: _entry.note,
+      note: _note.text,
     );
     if (mounted) Navigator.pop(context, EntryEditAction.saved);
   }
@@ -702,6 +702,19 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
               onPressed: _pickDate,
               icon: const Icon(Icons.calendar_month_outlined),
               label: Text(chineseDateWithWeekday(_date)),
+            ),
+            const SizedBox(height: 12),
+            const Text('备注（可不填）'),
+            const SizedBox(height: 5),
+            TextField(
+              key: const Key('edit-entry-note'),
+              controller: _note,
+              maxLength: 50,
+              maxLines: 1,
+              decoration: const InputDecoration(
+                hintText: '比如：纸箱 20 个',
+                counterText: '',
+              ),
             ),
             const SizedBox(height: 16),
             FilledButton(

@@ -26,6 +26,7 @@ class _RecordPageState extends State<RecordPage> {
   late DateTime _date;
   String? _business;
   final _amount = TextEditingController();
+  final _note = TextEditingController();
   bool _saving = false;
 
   @override
@@ -38,6 +39,7 @@ class _RecordPageState extends State<RecordPage> {
   @override
   void dispose() {
     _amount.dispose();
+    _note.dispose();
     super.dispose();
   }
 
@@ -132,12 +134,14 @@ class _RecordPageState extends State<RecordPage> {
       final draftCustomer = activeCustomer;
       final draftBusiness = _business!;
       final draftAmount = _amount.text;
+      final draftNote = _note.text.trim();
       final entry = await controller.repository.addEntry(
         customerId: activeCustomer.id,
         kind: EntryKind.debt,
         amountCents: cents,
         bizDate: businessDateOf(_date),
         business: _business!,
+        note: draftNote,
       );
       if (!mounted) return;
       final dateSuffix = _isSameDay(_date, _today)
@@ -154,12 +158,16 @@ class _RecordPageState extends State<RecordPage> {
             customer: draftCustomer,
             business: draftBusiness,
             amount: draftAmount,
+            note: draftNote,
           ),
         ),
       );
       controller.setRecordCustomer(null);
       controller.dataChanged();
-      setState(_amount.clear);
+      setState(() {
+        _amount.clear();
+        _note.clear();
+      });
     } on StateError {
       controller.setRecordCustomer(null);
       if (mounted) showLedgerSnack(context, '客户已变动，请重新选一次');
@@ -175,6 +183,7 @@ class _RecordPageState extends State<RecordPage> {
     required CustomerRow customer,
     required String business,
     required String amount,
+    required String note,
   }) async {
     final controller = context.read<AppController>();
     await controller.repository.softDeleteEntries([entryId]);
@@ -185,6 +194,8 @@ class _RecordPageState extends State<RecordPage> {
       _business = business;
       _amount.text = amount;
       _amount.selection = TextSelection.collapsed(offset: amount.length);
+      _note.text = note;
+      _note.selection = TextSelection.collapsed(offset: note.length);
     });
     showLedgerSnack(context, '已撤销，这笔没记');
   }
@@ -396,6 +407,31 @@ class _RecordPageState extends State<RecordPage> {
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) => _save(),
                   ),
+                ),
+              ],
+            ),
+          ),
+          LedgerCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const FieldLabel('备注（可不填，写具体是什么事）'),
+                TextField(
+                  key: const Key('entry-note'),
+                  controller: _note,
+                  maxLength: 50,
+                  maxLines: 1,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    hintText: '比如：纸箱 20 个 / 切 3 米板',
+                    counterText: '',
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.fromLTRB(16, 7, 16, 14),
+                  ),
+                  onSubmitted: (_) => _save(),
                 ),
               ],
             ),

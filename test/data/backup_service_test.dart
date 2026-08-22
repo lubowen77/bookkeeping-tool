@@ -185,7 +185,7 @@ void main() {
     );
   });
 
-  test('导入前生成当前库预备份，确认后四表全量替换', () async {
+  test('导入前生成当前库预备份，替换后流水备注保留', () async {
     await _seedCompleteDatabase(db);
     final incomingArchive = await service.exportDatabase();
 
@@ -234,6 +234,7 @@ void main() {
     expect(customers.map((row) => row.id), [7, 8]);
     expect(customers.map((row) => row.name), ['张老三', '回收站客户']);
     expect(entries.map((row) => row.id), [31, 32]);
+    expect(entries.first.note, '两箱', reason: '导出再导入后必须原样保留流水备注');
     expect(settings.map((row) => row.key).toSet(), {
       'font_scale',
       'last_backup',

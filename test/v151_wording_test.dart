@@ -52,7 +52,7 @@ void main() {
     await tester.tap(find.text('张老三'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(OutlinedButton, '记一笔账'), findsOneWidget);
-    expect(find.text('记账 · 送货'), findsOneWidget);
+    expect(find.text('送货'), findsOneWidget);
     expect(find.textContaining('\u8d4a'), findsNothing);
   });
 }

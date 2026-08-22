@@ -161,6 +161,7 @@ class _CustomerDetailPageState extends State<CustomerDetailPage> {
     int balanceCents, {
     int? initialPaymentCents,
     bool initialWriteOff = false,
+    String initialNote = '',
   }) async {
     final result = await showModalBottomSheet<SettlementResult>(
       context: context,
@@ -175,6 +176,7 @@ class _CustomerDetailPageState extends State<CustomerDetailPage> {
         balanceCents: balanceCents,
         initialPaymentCents: initialPaymentCents,
         initialWriteOff: initialWriteOff,
+        initialNote: initialNote,
       ),
     );
     if (result == null || !mounted) return;
@@ -224,6 +226,7 @@ class _CustomerDetailPageState extends State<CustomerDetailPage> {
       result.balanceBeforeCents,
       initialPaymentCents: result.paymentCents,
       initialWriteOff: result.discountEntryId != null,
+      initialNote: result.paymentNote,
     );
   }
 
@@ -572,6 +575,7 @@ final class _DetailEntryRow extends StatelessWidget {
     };
     final date = DateTime.parse(entry.bizDate);
     return InkWell(
+      key: ValueKey('detail-entry-${entry.id}'),
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Container(
@@ -590,14 +594,14 @@ final class _DetailEntryRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$label${entry.business.isEmpty ? '' : ' · ${entry.business}'}',
+                    kind == EntryKind.debt ? entry.business : label,
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   Text(
-                    chineseDateWithWeekday(date),
+                    '${chineseDateWithWeekday(date)}${entry.note.isEmpty ? '' : ' · ${entry.note}'}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -691,12 +695,14 @@ final class _SettlementSheet extends StatefulWidget {
     required this.balanceCents,
     this.initialPaymentCents,
     this.initialWriteOff = false,
+    this.initialNote = '',
   });
 
   final CustomerRow customer;
   final int balanceCents;
   final int? initialPaymentCents;
   final bool initialWriteOff;
+  final String initialNote;
 
   @override
   State<_SettlementSheet> createState() => _SettlementSheetState();
@@ -704,6 +710,7 @@ final class _SettlementSheet extends StatefulWidget {
 
 class _SettlementSheetState extends State<_SettlementSheet> {
   late final TextEditingController _amount;
+  late final TextEditingController _note;
   late bool _writeOff;
   bool _saving = false;
 
@@ -718,12 +725,14 @@ class _SettlementSheetState extends State<_SettlementSheet> {
           ? ''
           : Money.formatCents(widget.initialPaymentCents!),
     );
+    _note = TextEditingController(text: widget.initialNote);
     _writeOff = widget.initialWriteOff;
   }
 
   @override
   void dispose() {
     _amount.dispose();
+    _note.dispose();
     super.dispose();
   }
 
@@ -765,6 +774,7 @@ class _SettlementSheetState extends State<_SettlementSheet> {
       customerId: widget.customer.id,
       paymentCents: cents,
       writeOffRemaining: writeOff,
+      note: _note.text,
     );
     if (mounted) Navigator.pop(context, result);
   }
@@ -876,6 +886,19 @@ class _SettlementSheetState extends State<_SettlementSheet> {
                   style: const TextStyle(fontSize: 18),
                 ),
               ),
+            const SizedBox(height: 8),
+            const Text('备注（可不填）'),
+            const SizedBox(height: 5),
+            TextField(
+              key: const Key('settlement-note'),
+              controller: _note,
+              maxLength: 50,
+              maxLines: 1,
+              decoration: const InputDecoration(
+                hintText: '比如：微信转的 / 现金',
+                counterText: '',
+              ),
+            ),
             const SizedBox(height: 10),
             FilledButton(
               key: const Key('confirm-settlement'),

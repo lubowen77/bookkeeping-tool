@@ -39,6 +39,7 @@ final class SettlementResult {
   const SettlementResult({
     required this.paymentEntryId,
     required this.paymentCents,
+    required this.paymentNote,
     required this.discountEntryId,
     required this.balanceBeforeCents,
     required this.balanceAfterCents,
@@ -46,6 +47,7 @@ final class SettlementResult {
 
   final int paymentEntryId;
   final int paymentCents;
+  final String paymentNote;
   final int? discountEntryId;
   final int balanceBeforeCents;
   final int balanceAfterCents;

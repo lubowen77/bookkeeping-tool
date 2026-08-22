@@ -93,7 +93,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -105,6 +105,12 @@ class AppDatabase extends _$AppDatabase {
       if (from < 2) {
         await migrator.createTable(businesses);
         await _seedBusinessesFromV1();
+      }
+      if (from < 3) {
+        await customStatement(
+          "UPDATE entries SET note = '' "
+          "WHERE kind = 'initial' AND note = '期初建档'",
+        );
       }
     },
     beforeOpen: (details) async {

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -86,7 +87,7 @@ void main() {
     final repository = LedgerRepository(db);
     await db.customSelect('SELECT 1').getSingle();
 
-    expect(db.schemaVersion, 2);
+    expect(db.schemaVersion, 3);
     expect((await db.select(db.customers).get()).map((row) => row.id), [1, 2]);
     expect((await db.select(db.ledgerEntries).get()).map((row) => row.id), [
       1,
@@ -105,5 +106,101 @@ void main() {
     expect(businesses.singleWhere((row) => row.name == '送货').useCount, 2);
     expect(businesses.singleWhere((row) => row.name == '包装').useCount, 1);
     expect(businesses.singleWhere((row) => row.name == '加工').useCount, 0);
+  });
+
+  test('schemaVersion 2 升到 3 只清理期初建档的历史备注', () async {
+    final temporary = await Directory.systemTemp.createTemp(
+      'zhangben-v2-migration-',
+    );
+    final file = File('${temporary.path}/v2.sqlite');
+    final v2 = sqlite3.open(file.path);
+    addTearDown(() async {
+      await temporary.delete(recursive: true);
+    });
+
+    v2.execute('''
+      CREATE TABLE customers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        pinyin_full TEXT NOT NULL DEFAULT '',
+        pinyin_abbr TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        deleted_at TEXT
+      )
+    ''');
+    v2.execute('''
+      CREATE TABLE entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL REFERENCES customers(id),
+        kind TEXT NOT NULL,
+        business TEXT NOT NULL DEFAULT '',
+        amount_cents INTEGER NOT NULL,
+        biz_date TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      )
+    ''');
+    v2.execute(
+      'CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+    );
+    v2.execute('''
+      CREATE TABLE day_photos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        biz_date TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        deleted_at TEXT
+      )
+    ''');
+    v2.execute('''
+      CREATE TABLE businesses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        pinyin_full TEXT NOT NULL DEFAULT '',
+        pinyin_abbr TEXT NOT NULL DEFAULT '',
+        use_count INTEGER NOT NULL DEFAULT 0,
+        last_used TEXT,
+        created_at TEXT NOT NULL,
+        deleted_at TEXT
+      )
+    ''');
+    v2.execute('''
+      INSERT INTO customers
+        (id,name,note,pinyin_full,pinyin_abbr,created_at,deleted_at)
+      VALUES
+        (1,'张老三','','zhanglaosan','zls','2026-08-01T10:00:00+08:00',NULL)
+    ''');
+    v2.execute('''
+      INSERT INTO entries
+        (id,customer_id,kind,business,amount_cents,biz_date,note,created_at,updated_at,deleted_at)
+      VALUES
+        (1,1,'initial','',10000,'2026-08-01','期初建档','2026-08-01T10:00:00+08:00','2026-08-01T10:00:00+08:00',NULL),
+        (2,1,'initial','',2000,'2026-08-02','手工备注','2026-08-02T10:00:00+08:00','2026-08-02T10:00:00+08:00',NULL),
+        (3,1,'debt','送货',3000,'2026-08-03','期初建档','2026-08-03T10:00:00+08:00','2026-08-03T10:00:00+08:00',NULL),
+        (4,1,'initial','',4000,'2026-08-04','期初建档','2026-08-04T10:00:00+08:00','2026-08-04T10:00:00+08:00','2026-08-05T10:00:00+08:00')
+    ''');
+    v2.execute('PRAGMA user_version = 2');
+    v2.close();
+
+    final db = AppDatabase.forTesting(NativeDatabase(file));
+    addTearDown(db.close);
+    final repository = LedgerRepository(db);
+    await db.customSelect('SELECT 1').getSingle();
+
+    expect(db.schemaVersion, 3);
+    expect(await repository.balanceCentsForCustomer(1), 15000);
+    final entries = await (db.select(
+      db.ledgerEntries,
+    )..orderBy([(row) => OrderingTerm.asc(row.id)])).get();
+    expect(entries.map((entry) => entry.note), ['', '手工备注', '期初建档', '']);
+    expect(entries.map((entry) => entry.amountCents), [
+      10000,
+      2000,
+      3000,
+      4000,
+    ]);
   });
 }

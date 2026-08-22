@@ -94,6 +94,7 @@ void main() {
       customerId: customer.customer.id,
       paymentCents: 65000,
       writeOffRemaining: true,
+      note: '  微信转的  ',
     );
     expect(cleared.balanceBeforeCents, 70000);
     expect(cleared.balanceAfterCents, 0);
@@ -105,6 +106,20 @@ void main() {
     expect(
       entries.singleWhere((entry) => entry.kind == 'discount').amountCents,
       5000,
+    );
+    expect(
+      entries
+          .singleWhere(
+            (entry) =>
+                entry.kind == 'payment' && entry.id == cleared.paymentEntryId,
+          )
+          .note,
+      '微信转的',
+    );
+    expect(
+      entries.singleWhere((entry) => entry.kind == 'discount').note,
+      isEmpty,
+      reason: '同次抹零只在收款流水上保留备注',
     );
   });
 
@@ -169,7 +184,7 @@ void main() {
     expect(await repository.balanceCentsForCustomer(customer.id), 20000);
   });
 
-  test('期初欠款为 0 时仍生成带期初建档备注的零金额流水', () async {
+  test('期初欠款为 0 时仍生成无流水备注的零金额流水', () async {
     final result = await repository.addInitialCustomer(
       name: '赵满仓',
       currentDebtCents: 0,
@@ -180,7 +195,7 @@ void main() {
     expect(entries.single.kind, EntryKind.initial.storageValue);
     expect(entries.single.amountCents, 0);
     expect(entries.single.business, isEmpty);
-    expect(entries.single.note, '期初建档');
+    expect(entries.single.note, isEmpty);
     expect(await repository.balanceCentsForCustomer(result.customer.id), 0);
 
     await expectLater(
@@ -240,6 +255,36 @@ void main() {
     final updated = await repository.getEntry(entry.id);
     expect(updated.business, '拉货');
     expect(updated.bizDate, '2026-08-07');
+  });
+
+  test('编辑只改流水备注时金额、业务、日期和客户不变', () async {
+    final customer = await repository.addCustomer(name: '孙秀英');
+    final entry = await repository.addEntry(
+      customerId: customer.id,
+      kind: EntryKind.debt,
+      business: '送货',
+      amountCents: 12345,
+      bizDate: '2026-08-06',
+      note: '原备注',
+    );
+
+    await repository.updateEntry(
+      entryId: entry.id,
+      customerId: entry.customerId,
+      kind: EntryKind.debt,
+      business: entry.business,
+      amountCents: entry.amountCents,
+      bizDate: entry.bizDate,
+      note: '  新备注  ',
+    );
+
+    final updated = await repository.getEntry(entry.id);
+    expect(updated.customerId, customer.id);
+    expect(updated.kind, EntryKind.debt.storageValue);
+    expect(updated.business, '送货');
+    expect(updated.amountCents, 12345);
+    expect(updated.bizDate, '2026-08-06');
+    expect(updated.note, '新备注');
   });
 
   test('编辑收款金额、日期和所属客户后两边余额与日期视图都正确', () async {
