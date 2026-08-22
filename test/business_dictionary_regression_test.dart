@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zhangben/app/app_controller.dart';
+import 'package:zhangben/app/app_theme.dart';
 import 'package:zhangben/app/zhangben_app.dart';
 import 'package:zhangben/data/database/app_database.dart';
 import 'package:zhangben/data/repositories/ledger_repository.dart';
@@ -23,10 +24,11 @@ void main() {
     return (controller, repository);
   }
 
-  testWidgets('删除字典业务后，记账页「更多」格不得残留已删业务', (tester) async {
+  testWidgets('长尾业务用已选胶囊展示，第 6 格恒为更多入口', (tester) async {
     final (controller, repository) = await pumpApp(tester);
     // 「修车」拼音排序在 5 个种子业务之后，不进快捷前 5，只能经「更多」选中
     final biz = await repository.addBusiness('修车');
+    final topBusiness = (await repository.activeBusinesses(limit: 5)).first;
     controller.dataChanged();
     await tester.pumpAndSettle();
 
@@ -37,10 +39,41 @@ void main() {
 
     final moreButton = find.byKey(const Key('business-button-more'));
     expect(
-      find.descendant(of: moreButton, matching: find.text('修车')),
+      find.descendant(of: moreButton, matching: find.text('更多…')),
       findsOneWidget,
-      reason: '选中长尾业务后应显示在「更多」格',
+      reason: '选中长尾业务后第 6 格仍应是「更多…」',
     );
+    expect(
+      tester
+          .widget<Material>(
+            find.descendant(of: moreButton, matching: find.byType(Material)),
+          )
+          .color,
+      AppColors.card,
+      reason: '「更多…」永不进入选中态',
+    );
+    final pickedLabel = find.byKey(const Key('business-picked-label'));
+    expect(pickedLabel, findsOneWidget);
+    expect(
+      find.descendant(of: pickedLabel, matching: find.text('已选')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: pickedLabel, matching: find.text('修车')),
+      findsOneWidget,
+    );
+
+    await tester.tap(pickedLabel);
+    await tester.pumpAndSettle();
+    expect(find.text('选业务'), findsOneWidget, reason: '点胶囊应打开业务面板');
+    await tester.tap(find.byKey(ValueKey('pick-business-${topBusiness.id}')));
+    await tester.pumpAndSettle();
+    expect(pickedLabel, findsNothing, reason: '选回前 5 业务时胶囊应消失');
+
+    await tester.tap(moreButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('修车'));
+    await tester.pumpAndSettle();
 
     await repository.softDeleteBusiness(biz.id);
     controller.dataChanged();
@@ -50,8 +83,9 @@ void main() {
     expect(
       find.descendant(of: moreButton, matching: find.text('更多…')),
       findsOneWidget,
-      reason: '「更多」格应恢复默认文案',
+      reason: '「更多」格应始终保持默认文案',
     );
+    expect(pickedLabel, findsNothing, reason: '软删当前长尾业务后胶囊应消失');
   });
 
   test('软删业务后只改历史流水金额不会复活该业务', () async {

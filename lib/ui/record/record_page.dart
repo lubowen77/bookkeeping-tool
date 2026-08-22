@@ -290,71 +290,80 @@ class _RecordPageState extends State<RecordPage> {
             ),
           ),
           LedgerCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const FieldLabel('什么业务'),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 7, 14, 14),
-                  child:
-                      FutureBuilder<
-                        ({List<BusinessRow> top, bool selectedAlive})
-                      >(
-                        key: ValueKey(
-                          'quick-businesses-${controller.revision}',
-                        ),
-                        future: _loadQuickBusinesses(controller),
-                        builder: (context, snapshot) {
-                          final businesses =
-                              snapshot.data?.top ?? const <BusinessRow>[];
-                          final selectedAlive =
-                              snapshot.data?.selectedAlive ?? true;
-                          final selected = _business;
-                          if (selected != null &&
-                              snapshot.hasData &&
-                              !selectedAlive) {
-                            // 字典里已删掉的业务不能留在选中态（§3.7 删除边界）
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted && _business == selected) {
-                                setState(() => _business = null);
-                              }
-                            });
-                          }
-                          final inTop = businesses.any(
-                            (item) => item.name == selected,
-                          );
-                          final showSelectedInMore =
-                              selected != null && selectedAlive && !inTop;
-                          return GridView.count(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            crossAxisCount: 3,
-                            mainAxisSpacing: 8,
-                            crossAxisSpacing: 8,
-                            mainAxisExtent: 58,
-                            children: [
-                              for (final business in businesses)
-                                _BusinessButton(
-                                  key: ValueKey(
-                                    'business-button-${business.name}',
-                                  ),
-                                  text: business.name,
-                                  selected: selected == business.name,
-                                  onTap: () =>
-                                      setState(() => _business = business.name),
-                                ),
-                              _BusinessButton(
-                                key: const Key('business-button-more'),
-                                text: showSelectedInMore ? selected : '更多…',
-                                selected: showSelectedInMore,
-                                onTap: _chooseOtherBusiness,
+            child: FutureBuilder<({List<BusinessRow> top, bool selectedAlive})>(
+              key: ValueKey('quick-businesses-${controller.revision}'),
+              future: _loadQuickBusinesses(controller),
+              builder: (context, snapshot) {
+                final businesses = snapshot.data?.top ?? const <BusinessRow>[];
+                final selectedAlive = snapshot.data?.selectedAlive ?? true;
+                final selected = _business;
+                if (selected != null && snapshot.hasData && !selectedAlive) {
+                  // 字典里已删掉的业务不能留在选中态（§3.7 删除边界）
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && _business == selected) {
+                      setState(() => _business = null);
+                    }
+                  });
+                }
+                final inTop = businesses.any((item) => item.name == selected);
+                final showPickedLabel =
+                    selected != null && selectedAlive && !inTop;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              '什么业务',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: AppColors.muted,
+                                letterSpacing: 1,
                               ),
-                            ],
-                          );
-                        },
+                            ),
+                          ),
+                          if (showPickedLabel)
+                            _BusinessPickedLabel(
+                              key: const Key('business-picked-label'),
+                              business: selected,
+                              onTap: _chooseOtherBusiness,
+                            ),
+                        ],
                       ),
-                ),
-              ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 7, 14, 14),
+                      child: GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                        mainAxisExtent: 58,
+                        children: [
+                          for (final business in businesses)
+                            _BusinessButton(
+                              key: ValueKey('business-button-${business.name}'),
+                              text: business.name,
+                              selected: selected == business.name,
+                              onTap: () =>
+                                  setState(() => _business = business.name),
+                            ),
+                          _BusinessButton(
+                            key: const Key('business-button-more'),
+                            text: '更多…',
+                            selected: false,
+                            onTap: _chooseOtherBusiness,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           LedgerCard(
@@ -400,6 +409,61 @@ class _RecordPageState extends State<RecordPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+final class _BusinessPickedLabel extends StatelessWidget {
+  const _BusinessPickedLabel({
+    super.key,
+    required this.business,
+    required this.onTap,
+  });
+
+  final String business;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.58,
+      ),
+      child: Material(
+        color: AppColors.greenBackground,
+        shape: const StadiumBorder(
+          side: BorderSide(color: AppColors.green, width: 1.5),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  '已选',
+                  style: TextStyle(fontSize: 15, color: AppColors.greenInk),
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    business,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.greenInk,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
