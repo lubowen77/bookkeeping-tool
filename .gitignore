@@ -45,3 +45,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 android/build/
+
+# 本地 IDE/agent 配置
+.claude/

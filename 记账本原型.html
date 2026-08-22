@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>记账本 · 交互原型</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
@@ -136,6 +137,29 @@
   .bizgrid{ display:grid; grid-template-columns:repeat(3,1fr); gap:.55rem; padding:.55rem 1rem .95rem; }
   .bizbtn{ border:1.5px solid var(--line); background:var(--card); border-radius:12px; min-height:2.9rem; font-size:1.05rem; }
   .bizbtn.active{ border-color:var(--green); background:var(--green-bg); color:var(--green-ink); font-weight:700; }
+  /* v1.6 · 业务区标题行：选中的业务不在宫格里时，右侧出现「已选」胶囊（第 6 格永远是「更多…」入口） */
+  .field-label.biz-head{ display:flex; align-items:center; justify-content:space-between; gap:.6rem; }
+  .biz-picked{
+    display:inline-flex; align-items:center; gap:.35rem; max-width:62%; padding:.22rem .75rem; border-radius:999px;
+    background:var(--green-bg); border:1.5px solid var(--green); color:var(--green-ink); font-size:.98rem; font-weight:750; letter-spacing:0;
+  }
+  .biz-picked small{ flex:none; font-size:.78rem; font-weight:500; opacity:.8; }
+  .biz-picked span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* v1.6 · 页面内「已记上 / 撤回」条：不是浮层、不遮挡任何控件、不限时，到下一次操作为止 */
+  .done-bar{
+    display:flex; align-items:center; gap:.7rem; margin:0 .9rem .6rem; padding:.65rem .9rem; border-radius:var(--radius);
+    background:var(--green-bg); border:1.5px solid var(--green); color:var(--green-ink); font-size:1.02rem; line-height:1.4;
+  }
+  .done-bar .msg{ flex:1; min-width:0; }
+  .done-bar .msg b{ font-weight:750; }
+  .done-bar .msg small{ display:block; font-size:.86rem; color:var(--muted); }
+  .done-bar .undo{ flex:none; min-height:2.5rem; padding:.3rem .95rem; border:1.5px solid var(--green); border-radius:10px; background:var(--card); color:var(--green-ink); font-weight:750; font-size:1.05rem; }
+  /* v1.6 · 流水备注 */
+  .note-input{ width:100%; border:0; padding:.45rem 1rem .9rem; font-size:1.1rem; background:transparent; }
+  .note-input::placeholder{ color:#C9C5B6; }
+  .bill-table td .nt{ display:block; font-size:.8rem; color:var(--muted); font-weight:400; }
+  .bill-opt{ display:flex; align-items:center; gap:.6rem; padding:.55rem 1.1rem .1rem; font-size:.95rem; color:var(--muted); }
+  .bill-opt input{ width:1.3rem; height:1.3rem; accent-color:var(--green); }
   .amount-display{ display:flex; align-items:baseline; gap:.3rem; padding:.55rem 1.1rem .75rem; }
   .amount-display .cny{ font-size:1.3rem; color:var(--muted); flex:none; }
   .amt-input{
@@ -295,7 +319,7 @@
         </button>
       </div>
       <div class="card">
-        <div class="field-label">什么业务</div>
+        <div class="field-label biz-head"><span>什么业务</span><button class="biz-picked" id="biz-picked" type="button" hidden aria-label="换一个业务"><small>已选</small><span id="biz-picked-name"></span></button></div>
         <div class="bizgrid" id="bizgrid"></div>
       </div>
       <div class="card">
@@ -306,7 +330,12 @@
         </div>
         <div class="amt-hint">点一下，用手机键盘输数字</div>
       </div>
+      <div class="card">
+        <div class="field-label">备注（可不填，写具体是什么事）</div>
+        <input class="note-input" id="rec-note" placeholder="比如：纸箱 20 个 / 切 3 米板" maxlength="50" autocomplete="off" aria-label="备注">
+      </div>
       <div class="savebar"><button class="btn btn-primary" style="width:100%" id="btn-save">记 上</button></div>
+      <div class="done-bar" id="rec-done" hidden><div class="msg" id="rec-done-msg"></div><button class="undo" type="button" id="rec-undo">撤回</button></div>
     </main>
 
     <!-- ════════ 页2 · 今天 ════════ -->
@@ -442,6 +471,7 @@
         <input type="checkbox" id="wipe-check">
         <span>剩下的 <b class="num" id="wipe-n"></b> 不要了（抹零），这次<b>结清</b></span>
       </label>
+      <div class="fieldbox" style="margin-top:.5rem"><label>备注（可不填）</label><input id="settle-note" placeholder="比如：微信转的 / 现金" maxlength="50" autocomplete="off"></div>
       <div class="savebar"><button class="btn btn-primary" style="width:100%" id="settle-save">收 好</button></div>
     </div>
 
@@ -493,6 +523,7 @@
       <p style="margin:.1rem 1.1rem .5rem;font-size:.95rem;color:var(--muted)" id="ed-info"></p>
       <div class="fieldbox"><label>金额（元）</label><input id="ed-amt" inputmode="decimal" autocomplete="off"></div>
       <div class="fieldbox"><label>哪天的账</label><input id="ed-date" type="date"></div>
+      <div class="fieldbox"><label>备注（可不填）</label><input id="ed-note" placeholder="比如：纸箱 20 个" maxlength="50" autocomplete="off"></div>
       <p style="margin:0 1.1rem .5rem;font-size:.8rem;color:#A7A392">正式版这里还能改业务、换客户</p>
       <div class="confirm-actions"><button class="btn btn-danger-ghost" id="ed-del">删掉这笔</button><button class="btn btn-primary" id="ed-save">保存修改</button></div>
     </div>
@@ -503,6 +534,7 @@
         <button class="backbtn" data-close="panel-bill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>返回</button>
         <h3>账单预览</h3><span style="width:3.4rem"></span>
       </div>
+      <label class="bill-opt"><input type="checkbox" id="bill-note-check" checked><span>账单上显示备注（会记住这次的选择）</span></label>
       <div style="flex:1;overflow-y:auto" id="bill-body"></div>
       <div class="savebar"><button class="btn btn-primary" style="width:100%" id="bill-send">存成图片，发微信给他</button></div>
     </div>
@@ -530,7 +562,7 @@ let CID = 1, EID = 1;
 const customers = [];
 const entries = [];
 function addCust(name, note, abbr, full){ const c = {id:CID++, name, note, abbr, full, deleted:false}; customers.push(c); return c; }
-function addEntry(cid, kind, business, amount, date){ const e = {id:EID++, cid, kind, business, amount, date, time:'', deleted:false}; entries.push(e); return e; }
+function addEntry(cid, kind, business, amount, date, note=''){ const e = {id:EID++, cid, kind, business, amount, date, note, time:'', deleted:false}; entries.push(e); return e; }
 
 const c1=addCust('张老三','东村','zls','zhanglaosan'), c2=addCust('李桂芳','小卖部','lgf','liguifang'),
 c3=addCust('王建国','开货车的','wjg','wangjianguo'), c4=addCust('刘婶','北头','ls','liushen'),
@@ -541,12 +573,12 @@ c11=addCust('郑大有','','zdy','zhengdayou'), c12=addCust('吴二嫂','','wes'
 c13=addCust('钱广发','集上','qgf','qianguangfa'), c14=addCust('杨树林','杨庄','ysl','yangshulin');
 
 addEntry(c1.id,'initial','',860, daysAgo(40));
-addEntry(c1.id,'debt','送货',350, daysAgo(6)); addEntry(c1.id,'debt','材料',120, daysAgo(3));
-addEntry(c1.id,'payment','',500, daysAgo(2)); addEntry(c1.id,'debt','送货',410, TODAY);
+addEntry(c1.id,'debt','送货',350, daysAgo(6), '纸箱 20 个'); addEntry(c1.id,'debt','材料',120, daysAgo(3));
+addEntry(c1.id,'payment','',500, daysAgo(2), '微信转的'); addEntry(c1.id,'debt','送货',410, TODAY);
 addEntry(c2.id,'initial','',230, daysAgo(40)); addEntry(c2.id,'debt','拉货',80, daysAgo(1)); addEntry(c2.id,'debt','送货',65, TODAY);
-addEntry(c3.id,'initial','',2400, daysAgo(40)); addEntry(c3.id,'debt','加工',600, daysAgo(9)); addEntry(c3.id,'payment','',1000, daysAgo(5));
+addEntry(c3.id,'initial','',2400, daysAgo(40)); addEntry(c3.id,'debt','加工',600, daysAgo(9), '切 3 米板 4 块'); addEntry(c3.id,'payment','',1000, daysAgo(5));
 addEntry(c4.id,'initial','',45, daysAgo(40)); addEntry(c4.id,'payment','',40, daysAgo(12)); addEntry(c4.id,'discount','',5, daysAgo(12));
-addEntry(c5.id,'debt','人工',300, daysAgo(2)); addEntry(c5.id,'debt','材料',95, TODAY);
+addEntry(c5.id,'debt','人工',300, daysAgo(2), '两个人半天'); addEntry(c5.id,'debt','材料',95, TODAY);
 addEntry(c6.id,'initial','',1350, daysAgo(40)); addEntry(c6.id,'debt','送货',220, daysAgo(4));
 addEntry(c7.id,'initial','',75, daysAgo(40));
 addEntry(c8.id,'initial','',520, daysAgo(40)); addEntry(c8.id,'debt','拉货',140, TODAY);
@@ -582,7 +614,7 @@ function toast(msg, undoFn){
   const t=$('#toast'); t.innerHTML='';
   const s=document.createElement('span'); s.textContent=msg; t.appendChild(s);
   if(undoFn){
-    const b=document.createElement('button'); b.className='undo'; b.textContent='撤销'; b.type='button';
+    const b=document.createElement('button'); b.className='undo'; b.textContent='撤回'; b.type='button';
     b.addEventListener('click', ()=>{ t.classList.remove('show'); undoFn(); });
     t.appendChild(b);
   }
@@ -593,6 +625,7 @@ function toast(msg, undoFn){
 
 /* 覆盖层开关 */
 const scrim = $('#scrim'); let openLayers = [];
+let detailDone = null;   /* v1.6：客户详情页内「已收款 / 撤回」条的状态（msg + undo） */
 /* scrim 永远垫在最上层弹层的正下方：sheet(50)→49，panel(45)→44 */
 function syncScrim(){
   if(!openLayers.length){ scrim.classList.remove('show'); return; }
@@ -603,7 +636,8 @@ function syncScrim(){
 function openLayer(id){ const el=document.getElementById(id); el.classList.add('show');
   if(!openLayers.includes(id)) openLayers.push(id); syncScrim(); }
 function closeLayer(id){ const el=document.getElementById(id); el.classList.remove('show');
-  openLayers = openLayers.filter(x=>x!==id); syncScrim(); }
+  openLayers = openLayers.filter(x=>x!==id); syncScrim();
+  if(id==='panel-detail') detailDone = null;   /* v1.6：离开详情页即收起收款撤回条 */ }
 scrim.addEventListener('click', ()=>{ if(openLayers.length) closeLayer(openLayers[openLayers.length-1]); });
 document.querySelectorAll('[data-close]').forEach(b=> b.addEventListener('click', ()=>closeLayer(b.dataset.close)));
 
@@ -623,6 +657,7 @@ document.querySelectorAll('.tab').forEach(tab=>{
     document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t===tab));
     Object.entries(pages).forEach(([k,sel])=> $(sel).classList.toggle('active', k===tab.dataset.page));
     $('#fab-add').hidden = tab.dataset.page!=='cust';
+    hideRecDone();   /* v1.6：切换页签即收起记账页的撤回条 */
     if(tab.dataset.page==='today') renderToday();
     if(tab.dataset.page==='cust') renderCust();
   });
@@ -639,6 +674,25 @@ function sanitizeAmt(el){
 
 /* ═══════════ 记一笔 ═══════════ */
 let recCust = null, recBiz = null, recDate = TODAY;
+
+/* v1.6 · 页面内「已记上 / 撤回」条：替代原底部浮条。不遮挡、不限时，
+   到开始记下一笔（页内任何点击或输入）或切换页签时自动收起 */
+let recUndo = null;
+function showRecDone(html, undoFn){
+  recUndo = undoFn; $('#rec-done-msg').innerHTML = html; $('#rec-done').hidden = false;
+  /* 条可能在折叠线之下（大字号/小屏），出现后自动滚到完整可见，不让老人自己翻 */
+  requestAnimationFrame(()=> $('#rec-done').scrollIntoView({block:'nearest', behavior:'smooth'}));
+}
+function hideRecDone(){ recUndo = null; $('#rec-done').hidden = true; }
+$('#rec-undo').addEventListener('click', ()=>{ const fn = recUndo; hideRecDone(); fn && fn(); });
+['click','input'].forEach(ev => $('#page-record').addEventListener(ev, e=>{ if(!e.target.closest('#rec-done')) hideRecDone(); }, true));
+
+/* v1.6 · 打开业务面板（「更多…」格与「已选」胶囊共用） */
+function openBizPicker(){
+  bizMode='pick'; $('#biz-title').textContent='选业务';
+  $('#biz-search').value=''; renderBizPanel(''); openLayer('panel-biz');
+}
+$('#biz-picked').addEventListener('click', openBizPicker);
 $('#rec-now').textContent = `${today.getMonth()+1}月${today.getDate()}日`;
 $('#rec-amt-input').addEventListener('input', e=> sanitizeAmt(e.target));
 
@@ -656,15 +710,16 @@ function renderBizGrid(){
     b.addEventListener('click', ()=>{ recBiz=bz.name; renderBizGrid(); });
     g.appendChild(b);
   });
+  /* v1.6：第 6 格永远是「更多…」入口，不再被选中的业务顶替、也不高亮 */
   const more=document.createElement('button'); more.className='bizbtn'; more.type='button';
-  const inTop = top.some(z=>z.name===recBiz);
-  more.textContent = (recBiz && !inTop) ? recBiz : '更多…';
-  if(recBiz && !inTop) more.classList.add('active');
-  more.addEventListener('click', ()=>{
-    bizMode='pick'; $('#biz-title').textContent='选业务';
-    $('#biz-search').value=''; renderBizPanel(''); openLayer('panel-biz');
-  });
+  more.textContent = '更多…';
+  more.addEventListener('click', openBizPicker);
   g.appendChild(more);
+  /* v1.6：选中的业务不在宫格里时，标题行右侧显示「已选」胶囊，点它可换 */
+  const inTop = top.some(z=>z.name===recBiz);
+  const picked = $('#biz-picked');
+  picked.hidden = !(recBiz && !inTop);
+  if(recBiz && !inTop) $('#biz-picked-name').textContent = recBiz;
   $('#bizset-sub').textContent = [...bizList].sort((a,b)=>b.uses-a.uses).slice(0,4).map(b=>b.name).join('、') + ' 等 ' + bizList.length + ' 项';
 }
 
@@ -719,21 +774,22 @@ $('#btn-pick-cust').addEventListener('click', ()=>{ pickMode='record'; $('#pick-
 $('#btn-save').addEventListener('click', ()=>{
   if(!recCust){ toast('还没选客户 — 点最上面「谁的账」'); return; }
   if(!recBiz){ toast('还没选业务'); return; }
-  const input = $('#rec-amt-input');
+  const input = $('#rec-amt-input'), noteEl = $('#rec-note');
   const n = parseFloat(input.value);
   if(!n){ toast('还没输金额'); return; }
-  const c=recCust, biz=recBiz, dt=recDate, amtStr=input.value;
-  const e = addEntry(c.id, 'debt', biz, n, dt);
+  const c=recCust, biz=recBiz, dt=recDate, amtStr=input.value, note=noteEl.value.trim();
+  const e = addEntry(c.id, 'debt', biz, n, dt, note);
   bumpBiz(biz);
   renderToday(); renderCust();
-  toast(`已记上：${c.name} ${biz} ¥${fmt(n)}${dt!==TODAY ? '（'+dateCN(dt)+'）':''}`, ()=>{
+  /* v1.6：不再弹浮条，改为「记上」按钮正下方的页面内撤回条 */
+  showRecDone(`已记上：<b>${c.name} ${biz} ¥${fmt(n)}</b>${dt!==TODAY ? '（'+dateCN(dt)+'）':''}${note?`<small>${note}</small>`:''}`, ()=>{
     entries.splice(entries.indexOf(e),1);
-    recCust=c; recBiz=biz; input.value=amtStr;
+    recCust=c; recBiz=biz; input.value=amtStr; noteEl.value=note;
     const lb=$('#rec-cust-label'); lb.textContent=c.name+(c.note?'（'+c.note+'）':''); lb.classList.remove('empty');
     renderBizGrid(); renderToday(); renderCust();
-    toast('已撤销，这笔没记');
+    toast('已撤回，这笔没记');
   });
-  input.value=''; recCust=null;
+  input.value=''; noteEl.value=''; recCust=null;
   const lb=$('#rec-cust-label'); lb.textContent='点这里选客户'; lb.classList.add('empty');
 });
 
@@ -812,7 +868,7 @@ function renderToday(){
     const b=document.createElement('button'); b.className='row'; b.style.width='100%'; b.style.textAlign='left'; b.type='button';
     b.innerHTML = `<span class="stamp ${e.kind}">${zh}</span>
       <div class="grow"><div class="entry-main">${c.name}${c.note?`<small style="color:var(--muted);font-size:.8rem;font-weight:400">${c.note}</small>`:''}</div>
-      <div class="entry-sub">${e.kind==='debt'? e.business : KINDS[e.kind][1]}</div></div>
+      <div class="entry-sub">${e.kind==='debt'? e.business : KINDS[e.kind][1]}${e.note?' · '+e.note:''}</div></div>
       <span class="entry-amt num ${e.kind==='debt'||e.kind==='initial'?'pos':'neg'}">${e.kind==='debt'||e.kind==='initial'?'+':'−'}${fmt(e.amount)}</span>`;
     b.addEventListener('click', ()=> entryMenu(e));
     box.appendChild(b);
@@ -860,6 +916,7 @@ function entryMenu(e){
   $('#ed-info').textContent = `${c.name} · ${e.kind==='debt'? e.business : KINDS[e.kind][1]} · ${dateCN(e.date)} · 原来 ¥${fmt(e.amount)}`;
   $('#ed-amt').value = String(e.amount);
   $('#ed-date').value = e.date;
+  $('#ed-note').value = e.note||'';
   openLayer('sheet-edit');
 }
 $('#ed-amt').addEventListener('input', e=> sanitizeAmt(e.target));
@@ -868,6 +925,7 @@ $('#ed-save').addEventListener('click', ()=>{
   if(!n){ toast('金额不能是 0'); return; }
   editEntry.amount = n;
   if($('#ed-date').value) editEntry.date = $('#ed-date').value;
+  editEntry.note = $('#ed-note').value.trim();
   closeLayer('sheet-edit');
   renderAfterEdit();
   toast(`改好了：${custOf(editEntry.cid).name} ¥${fmt(n)}`);
@@ -925,7 +983,7 @@ $('#fab-add').addEventListener('click', ()=>{ pickMode='none'; $('#nc-name').val
 
 /* ═══════════ 客户详情 ═══════════ */
 let detailCid = null;
-function openDetail(cid){ detailCid = cid; renderDetail(); openLayer('panel-detail'); }
+function openDetail(cid){ if(cid!==detailCid) detailDone = null; detailCid = cid; renderDetail(); openLayer('panel-detail'); }
 function renderDetail(){
   const c = custOf(detailCid); const bal = balOf(c.id);
   const list = entries.filter(e=>!e.deleted && e.cid===c.id).sort((a,b)=> a.date<b.date?1:(a.date>b.date?-1:b.id-a.id));
@@ -940,6 +998,7 @@ function renderDetail(){
       <button class="btn btn-primary" id="d-settle" ${bal<=0?'disabled':''}>收 款</button>
       <button class="btn btn-ghost" id="d-debt">记一笔账</button>
     </div>
+    ${detailDone ? `<div class="done-bar" id="d-done"><div class="msg">${detailDone.msg}</div><button class="undo" type="button" id="d-undo">撤回</button></div>` : ''}
     <div style="padding:0 .9rem .9rem"><button class="btn btn-ghost" id="d-bill" style="width:100%;min-height:2.7rem;font-size:1rem">发账单给他（微信图片）</button></div>
     <div class="field-label" style="padding-left:1.1rem">一笔一笔的账（新的在上面，点某笔可改）</div>
     <div class="card" id="d-list" style="margin-bottom:1rem"></div>`;
@@ -950,15 +1009,18 @@ function renderDetail(){
     r.setAttribute('aria-label', `${e.kind==='debt'? e.business : full} ${fmt(e.amount)}元`);
     r.innerHTML = `<span class="stamp ${e.kind}">${zh}</span>
       <div class="grow"><div class="entry-main">${e.kind==='debt'? e.business : full}</div>
-      <div class="entry-sub num">${dateCN(e.date)}</div></div>
+      <div class="entry-sub num">${dateCN(e.date)}${e.note?' · '+e.note:''}</div></div>
       <span class="entry-amt num ${e.kind==='debt'||e.kind==='initial'?'pos':'neg'}">${e.kind==='debt'||e.kind==='initial'?'+':'−'}${fmt(e.amount)}</span>`;
     r.addEventListener('click', ()=> entryMenu(e));
     lb.appendChild(r);
   });
   if(!list.length) lb.innerHTML='<div class="empty-hint">还没有账</div>';
+  const du = body.querySelector('#d-undo');
+  if(du) du.addEventListener('click', ()=>{ const fn = detailDone.undo; detailDone = null; fn(); });
   body.querySelector('#d-settle').addEventListener('click', ()=> openSettle());
   body.querySelector('#d-bill').addEventListener('click', ()=>{ renderBill(); openLayer('panel-bill'); });
   body.querySelector('#d-debt').addEventListener('click', ()=>{
+    detailDone = null;
     const c2 = custOf(detailCid);
     recCust = c2; const lbl=$('#rec-cust-label'); lbl.textContent=c2.name+(c2.note?'（'+c2.note+'）':''); lbl.classList.remove('empty');
     closeLayer('panel-detail');
@@ -969,7 +1031,8 @@ function renderDetail(){
 
 /* ═══════════ 收款 ═══════════ */
 function openSettle(){
-  $('#settle-amt-input').value=''; renderSettle(); openLayer('sheet-settle');
+  if(detailDone){ detailDone = null; renderDetail(); }   /* v1.6：再次收款即收起上一次的撤回条 */
+  $('#settle-amt-input').value=''; $('#settle-note').value=''; renderSettle(); openLayer('sheet-settle');
 }
 function renderSettle(){
   const bal = balOf(detailCid);
@@ -991,23 +1054,28 @@ $('#settle-save').addEventListener('click', ()=>{
   if(!n){ toast('还没输收了多少钱'); return; }
   const c = custOf(detailCid);
   const remain = Math.round((bal-n)*100)/100;
-  const made = [addEntry(detailCid,'payment','',n,TODAY)];
-  let msg = `收了 ${c.name} ¥${fmt(n)}`;
+  const note = $('#settle-note').value.trim();
+  const made = [addEntry(detailCid,'payment','',n,TODAY,note)];   /* 备注只记在收款那条上，抹零条不带 */
+  let msg = `收了 ${c.name} <b>¥${fmt(n)}</b>`;
   if(remain>0 && $('#wipe-check').checked){ made.push(addEntry(detailCid,'discount','',remain,TODAY)); msg += `，抹零 ¥${fmt(remain)}，已结清`; }
   else if(remain>0) msg += `，还欠 ¥${fmt(remain)}`;
   else if(remain===0) msg += '，已结清';
   else msg += `，多付 ¥${fmt(-remain)}`;
   closeLayer('sheet-settle');
-  renderDetail(); renderCust(); renderToday();
-  toast(msg, ()=>{
+  /* v1.6：不再弹浮条，改为详情页内的撤回条，停留到离开详情页或再次操作 */
+  detailDone = { msg, undo: ()=>{
     made.forEach(e=> entries.splice(entries.indexOf(e),1));
     renderDetail(); renderCust(); renderToday();
-    toast('已撤销这次收款');
-  });
+    toast('已撤回这次收款');
+  }};
+  renderDetail(); renderCust(); renderToday();
 });
 
 /* ═══════════ 账单 ═══════════ */
+let billShowNote = true;   /* v1.6：账单是否带备注，默认带；正式版把选择存进 settings（bill_show_note），下次沿用 */
+$('#bill-note-check').addEventListener('change', e=>{ billShowNote = e.target.checked; renderBill(); });
 function renderBill(){
+  $('#bill-note-check').checked = billShowNote;
   const c = custOf(detailCid); const bal = balOf(c.id);
   const list = entries.filter(e=>!e.deleted && e.cid===c.id).sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:a.id-b.id));
   const now = new Date();
@@ -1025,7 +1093,8 @@ function renderBill(){
         const [,full] = KINDS[e.kind];
         const pos = e.kind==='debt'||e.kind==='initial';
         const [,m,d] = e.date.split('-');
-        return `<tr><td>${+m}/${+d}</td><td>${e.kind==='debt'? e.business : full}</td><td class="${pos?'r-owe':'r-pay'}">${pos?'+':'−'}${fmt(e.amount)}</td></tr>`;
+        const nt = (billShowNote && e.note) ? `<span class="nt">${e.note}</span>` : '';
+        return `<tr><td>${+m}/${+d}</td><td>${e.kind==='debt'? e.business : full}${nt}</td><td class="${pos?'r-owe':'r-pay'}">${pos?'+':'−'}${fmt(e.amount)}</td></tr>`;
       }).join('')}
     </table>
     <div class="bill-sep"></div>
@@ -1088,7 +1157,7 @@ function renderTrash(){
 function boot(){
   renderBizGrid(); renderToday(); renderCust();
   const n1=customers.filter(c=>!c.deleted).length, n2=entries.filter(e=>!e.deleted).length;
-  $('#about-line').textContent = `原型 v1.5 · ${n1} 位客户 · ${n2} 笔账 · 纯本地存储`;
+  $('#about-line').textContent = `原型 v1.6 · ${n1} 位客户 · ${n2} 笔账 · 纯本地存储`;
   const now=new Date(); $('#backup-time').textContent = `上次备份：今天 ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} · 只含账目数据，照片另存`;
 }
 boot();
